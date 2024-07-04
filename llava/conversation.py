@@ -1,9 +1,10 @@
 import dataclasses
 from enum import auto, Enum
-from typing import List, Tuple
+from typing import List, Tuple, Any, Dict, Union
 import base64
 from io import BytesIO
 from PIL import Image
+from transformers import AutoTokenizer
 
 
 class SeparatorStyle(Enum):
@@ -13,6 +14,7 @@ class SeparatorStyle(Enum):
     MPT = auto()
     PLAIN = auto()
     LLAMA_2 = auto()
+    LLAMA_3 = auto()
 
 
 @dataclasses.dataclass
@@ -91,6 +93,30 @@ class Conversation:
                 else:
                     ret += ""
             ret = ret.lstrip(self.sep)
+        elif self.sep_style == SeparatorStyle.LLAMA_3:
+            wrap_sys = lambda msg: f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>{msg}<|eot_id|>" if len(msg) > 0 else msg
+            wrap_inst_user = lambda msg: f"<|start_header_id|>user<|end_header_id|>{msg}<|eot_id|>"
+            wrap_inst_assistant = lambda msg: f"<|start_header_id|>assistant<|end_header_id|>{msg}<|eot_id|>"
+            ret = ""
+
+            for i, (role, message) in enumerate(messages):
+                if i == 0:
+                    assert message, "first message should not be none"
+                    assert role == self.roles[0], "first message should come from user"
+                if message:
+                    if type(message) is tuple:
+                        message, _, _ = message
+                    if i == 0: ret += wrap_sys(self.system)
+
+                    if i % 2 == 0:
+                        message = wrap_inst_user(message)
+                        ret += message
+                    else:
+                        message = wrap_inst_assistant(message)
+                        ret += message
+                else:
+                    ret += ""
+            ret += "<|start_header_id|>assistant<|end_header_id|>"
         elif self.sep_style == SeparatorStyle.PLAIN:
             seps = [self.sep, self.sep2]
             ret = self.system
@@ -103,7 +129,6 @@ class Conversation:
                     ret += ""
         else:
             raise ValueError(f"Invalid style: {self.sep_style}")
-
         return ret
 
     def append_message(self, role, message):
@@ -277,6 +302,20 @@ conv_llava_llama_2 = Conversation(
     sep2="</s>",
 )
 
+conv_llava_llama_3 = Conversation(
+    system="You are a highly intelligent and helpful language and vision AI assistant. "
+           "As a multimodal AI, you have the ability to process and analyze images. "
+           "Whenever an image is present in the conversation, very carefully examine it and consider its content when formulating your response. "
+           "You should give concise responses to very simple questions, but provide thorough responses to more complex and open-ended questions.",
+    roles=("USER", "ASSISTANT"),
+    version="llama_v3",
+    messages=[],
+    offset=0,
+    sep_style=SeparatorStyle.LLAMA_3,
+    sep="<|begin_of_text|>",
+    sep2="<|end_of_text|>",
+)
+
 conv_mpt = Conversation(
     system="""<|im_start|>system
 A conversation between a user and an LLM-based AI assistant. The assistant gives helpful and honest answers.""",
@@ -387,6 +426,7 @@ conv_templates = {
     "llava_v1": conv_llava_v1,
     "v1_mmtag": conv_llava_v1_mmtag,
     "llava_llama_2": conv_llava_llama_2,
+    "llava_llama_3": conv_llava_llama_3,
 
     "mpt": conv_mpt,
 }

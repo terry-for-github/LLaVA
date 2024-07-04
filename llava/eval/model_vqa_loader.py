@@ -9,7 +9,7 @@ from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_S
 from llava.conversation import conv_templates, SeparatorStyle
 from llava.model.builder import load_pretrained_model
 from llava.utils import disable_torch_init
-from llava.mm_utils import tokenizer_image_token, process_images, get_model_name_from_path
+from llava.mm_utils import tokenizer_image_token_llama3, process_images, get_model_name_from_path
 from torch.utils.data import Dataset, DataLoader
 
 from PIL import Image
@@ -53,7 +53,7 @@ class CustomDataset(Dataset):
         image = Image.open(os.path.join(self.image_folder, image_file)).convert('RGB')
         image_tensor = process_images([image], self.image_processor, self.model_config)[0]
 
-        input_ids = tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt')
+        input_ids = tokenizer_image_token_llama3(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt')
 
         return input_ids, image_tensor, image.size
 
@@ -111,6 +111,7 @@ def eval_model(args):
                 top_p=args.top_p,
                 num_beams=args.num_beams,
                 max_new_tokens=args.max_new_tokens,
+                pad_token_id=model.config.pad_token_id,
                 use_cache=True)
 
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()

@@ -93,6 +93,17 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                 tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=True)
                 cfg_pretrained = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
                 model = LlavaMptForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
+            elif 'llama' in model_name.lower():
+                from llava.model.language_model.llava_llama import LlavaConfig
+
+                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+                llava_cfg = LlavaConfig.from_pretrained(model_path)
+                if "v1.5" in model_name.lower():
+                    llava_cfg.delay_load = True  # a workaround for correctly loading v1.5 models
+
+                tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
+                llava_cfg = LlavaConfig.from_pretrained(model_path)
+                model = LlavaLlamaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=llava_cfg, **kwargs)
             else:
                 tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
                 cfg_pretrained = AutoConfig.from_pretrained(model_path)
@@ -112,6 +123,12 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                     low_cpu_mem_usage=True,
                     **kwargs
                 )
+            elif "llama3" in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+                tokenizer.pad_token = "<|reserved_special_token_0|>"
+                tokenizer.pad_token_id = 128002
+                model = LlavaLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+                model.config.pad_token_id = tokenizer.pad_token_id
             else:
                 tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
                 model = LlavaLlamaForCausalLM.from_pretrained(

@@ -10,7 +10,7 @@ from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_S
 from llava.conversation import conv_templates, SeparatorStyle
 from llava.model.builder import load_pretrained_model
 from llava.utils import disable_torch_init
-from llava.mm_utils import tokenizer_image_token, process_images, load_image_from_base64, get_model_name_from_path
+from llava.mm_utils import tokenizer_image_token, process_images, load_image_from_base64, get_model_name_from_path, tokenizer_image_token_llama3
 
 from PIL import Image
 import math
@@ -103,7 +103,7 @@ def eval_model(args):
             conv.append_message(conv.roles[1], None)
             prompt = conv.get_prompt()
 
-            input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+            input_ids = tokenizer_image_token_llama3(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
 
             image_tensor = process_images([image], image_processor, model.config)[0]
 
@@ -116,6 +116,7 @@ def eval_model(args):
                     temperature=args.temperature,
                     top_p=args.top_p,
                     num_beams=args.num_beams,
+                    pad_token_id=model.config.pad_token_id,
                     # no_repeat_ngram_size=3,
                     max_new_tokens=1024,
                     use_cache=True)
