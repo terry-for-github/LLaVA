@@ -1,15 +1,14 @@
 #!/bin/bash
 
-CKPT="llava-v1.5-13b-lora-$1"
+CKPT="$1"
 python -m llava.eval.model_vqa_science \
     --model-path ./checkpoints/$CKPT \
-    --model-base lmsys/vicuna-13b-v1.5 \
     --question-file ./playground/data/eval/scienceqa/llava_test_CQM-A.json \
     --image-folder ./playground/data/eval/scienceqa/images/test \
     --answers-file ./playground/data/eval/scienceqa/answers/$CKPT.jsonl \
     --single-pred-prompt \
     --temperature 0 \
-    --conv-mode vicuna_v1
+    --conv-mode llava_llama_3
 
 python llava/eval/eval_science_qa.py \
     --base-dir ./playground/data/eval/scienceqa \
