@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import re
+from .mousi_projector import MousiProjector
 
 
 class IdentityMap(nn.Module):
@@ -33,6 +34,9 @@ class SimpleResBlock(nn.Module):
 def build_vision_projector(config, delay_load=False, **kwargs):
     projector_type = getattr(config, 'mm_projector_type', 'linear')
 
+    if projector_type == 'mousi':
+        return MousiProjector(config.mm_hidden_size, config.m_token_one_patch, config.hidden_size)
+    
     if projector_type == 'linear':
         return nn.Linear(config.mm_hidden_size, config.hidden_size)
 

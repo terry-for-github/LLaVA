@@ -147,6 +147,7 @@ class ModelWorker:
                 prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
 
                 num_image_tokens = prompt.count(replace_token) * model.get_vision_tower().num_patches
+                raise ValueError('num_patches')
             else:
                 images = None
                 image_sizes = None

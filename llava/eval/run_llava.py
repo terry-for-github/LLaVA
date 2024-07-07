@@ -98,6 +98,8 @@ def eval_model(args):
 
     image_files = image_parser(args)
     images = load_images(image_files)
+    if len(images) > 1 and model.config.vision_tower == 'moe-vision-tower':
+        raise NotImplementedError('process multi-images.')
     image_sizes = [x.size for x in images]
     images_tensor = process_images(
         images,

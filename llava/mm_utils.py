@@ -166,6 +166,27 @@ def expand2square(pil_img, background_color):
 def process_images(images, image_processor, model_cfg):
     image_aspect_ratio = getattr(model_cfg, "image_aspect_ratio", None)
     new_images = []
+    if model_cfg.mm_vision_tower == 'moe-vision-tower':
+        if image_aspect_ratio == 'pad':
+            for image in images:
+                square_image_list = image_processor.help_expand2square(image, expand2square)
+                new_image = image_processor.preprocess(square_image_list)
+                new_images.append(new_image)
+        elif image_aspect_ratio == 'anyres':
+            raise NotImplementedError('image_aspect_ratio: ', image_aspect_ratio)
+        else:
+            for image in images:
+                copy_image = image_processor.help_copy_image(image)
+                new_image = image_processor.preprocess(copy_image)
+                new_images.append(new_image)
+        # print(list(map(lambda x: [y.shape for y in x], new_images)))
+        # # Assume all the inside processor will output the same size when fix input size if the first processor does.
+        # if all(image[0].shape == new_images[0][0].shape for image in new_images):
+        #     new_images = [torch.stack([image[i] for image in new_images]) for i in range(len(new_images[0]))]
+        # [[expert[0], expert[1], expert[2]], ... , [expert[0], expert[1], expert[2]]]
+        # len(new_images) == num_images, len(new_images[i] == num_experts, expert[i] == [num_channels, width[i], height[i]])
+        return new_images
+
     if image_aspect_ratio == 'pad':
         for image in images:
             image = expand2square(image, tuple(int(x*255) for x in image_processor.image_mean))
@@ -179,6 +200,7 @@ def process_images(images, image_processor, model_cfg):
         return image_processor(images, return_tensors='pt')['pixel_values']
     if all(x.shape == new_images[0].shape for x in new_images):
         new_images = torch.stack(new_images, dim=0)
+    # torch.Size([num_images, num_channels, width, height])
     return new_images
 
 

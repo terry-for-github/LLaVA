@@ -1,28 +1,27 @@
 #!/bin/bash
-# microsoft/layoutlmv3-large facebook/dinov2-giant
+# openai/clip-vit-large-patch14-336 
 accelerate launch \
-    --config_file double_nodes_${1}_zero2.yaml \
-    --main_process_ip $2 \
+    --config_file single_node_zero2.yaml \
     llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json \
     --model_name_or_path meta-llama/Meta-Llama-3-8B-Instruct \
     --version llama_v3 \
-    --data_path ./playground/data/LLaVA-Pretrain/blip_laion_cc_sbu_558k.json \
+    --data_path ./playground/data/LLaVA-Pretrain/blip_laion_cc_sbu_100.json \
     --image_folder ./playground/data/LLaVA-Pretrain/images \
-    --vision_tower moe-vision-tower\
-    --vision_experts_list openai/clip-vit-large-patch14-336 \
-    --m_token_one_patch 1 \
+    --vision_tower moe-vision-tower \
+    --vision_experts_list microsoft/layoutlmv3-large facebook/dinov2-giant openai/clip-vit-large-patch14-336 \
+    --m_token_one_patch 2 2 1 \
     --mm_projector_type mousi \
     --tune_mm_mlp_adapter True \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./checkpoints/llava-llama3-mousi-onlyclip-pretrain \
+    --output_dir ./checkpoints/llava-llama3-mousi-pretrain-toy \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 8 \
+    --per_device_train_batch_size 5 \
     --per_device_eval_batch_size 4 \
-    --gradient_accumulation_steps 2 \
+    --gradient_accumulation_steps 1 \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 24000 \
@@ -34,8 +33,7 @@ accelerate launch \
     --logging_steps 1 \
     --tf32 True \
     --model_max_length 2048 \
-    --gradient_checkpointing True \
+    --gradient_checkpointing False \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
-    --report_to wandb \
-    --run_name 'llava-llama3-mousi-pretrain'
+    --report_to none

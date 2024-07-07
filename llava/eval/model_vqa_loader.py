@@ -67,12 +67,19 @@ def collate_fn(batch):
     image_tensors = torch.stack(image_tensors, dim=0)
     return input_ids, image_tensors, image_sizes
 
+def moe_collate_fn(batch):
+    input_ids, image_tensors, image_sizes = zip(*batch)
+    input_ids = torch.stack(input_ids, dim=0)
+    image_tensors = [torch.stack([image_tensor[i] for image_tensor in image_tensors], dim=0) for i in range(len(image_tensors[0]))]
+    return input_ids, image_tensors, image_sizes
+
 
 # DataLoader
 def create_data_loader(questions, image_folder, tokenizer, image_processor, model_config, batch_size=1, num_workers=4):
     assert batch_size == 1, "batch_size must be 1"
     dataset = CustomDataset(questions, image_folder, tokenizer, image_processor, model_config)
-    data_loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False, collate_fn=collate_fn)
+    data_loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False,
+                             collate_fn=collate_fn if model_config.vision_tower != 'moe-vision-tower' else moe_collate_fn)
     return data_loader
 
 
@@ -100,11 +107,16 @@ def eval_model(args):
         cur_prompt = line["text"]
 
         input_ids = input_ids.to(device='cuda', non_blocking=True)
+        if model.config.vision_tower == 'moe-vision-tower':
+            image_tensor = [inside_image_tensor.to(dtype=torch.float16, device='cuda', non_blocking=True)
+                            for inside_image_tensor in image_tensor]
+        else:
+            image_tensor = image_tensor.to(dtype=torch.float16, device='cuda', non_blocking=True)
 
         with torch.inference_mode():
             output_ids = model.generate(
                 input_ids,
-                images=image_tensor.to(dtype=torch.float16, device='cuda', non_blocking=True),
+                images=image_tensor,
                 image_sizes=image_sizes,
                 do_sample=True if args.temperature > 0 else False,
                 temperature=args.temperature,

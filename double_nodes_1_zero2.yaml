@@ -1,6 +1,6 @@
 compute_environment: LOCAL_MACHINE
 deepspeed_config:
-  deepspeed_config_file: /code/MoE-LLaVA/scripts/zero3.json
+  deepspeed_config_file: ./scripts/zero2.json
   deepspeed_multinode_launcher: standard
   zero3_init_flag: false
 distributed_type: DEEPSPEED

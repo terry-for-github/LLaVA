@@ -107,10 +107,15 @@ def eval_model(args):
 
             image_tensor = process_images([image], image_processor, model.config)[0]
 
+            if model.config.vision_tower == 'moe-vision-tower':
+                image_tensor = [inside_image_tensor.unsqueeze(0).half().cuda() for inside_image_tensor in image_tensor]
+            else:
+                image_tensor = image_tensor.unsqueeze(0).half().cuda()
+
             with torch.inference_mode():
                 output_ids = model.generate(
                     input_ids,
-                    images=image_tensor.unsqueeze(0).half().cuda(),
+                    images=image_tensor,
                     image_sizes=[image.size],
                     do_sample=True if args.temperature > 0 else False,
                     temperature=args.temperature,
