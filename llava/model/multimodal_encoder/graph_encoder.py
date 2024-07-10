@@ -18,6 +18,7 @@ from PIL import Image
 from maskrcnn_benchmark.data.transforms import build_transforms
 from maskrcnn_benchmark.modeling.roi_heads.relation_head.utils_motifs import obj_edge_vectors, rel_vectors
 
+SG_HOME = '/userhome/sg_encoder/'
 
 def hex_to_bgr(hex_color):
     # 去掉颜色代码中的'#'号
@@ -56,8 +57,8 @@ class Transformer(nn.Module):
 
 class GraphProcessor(object):
     def __init__(self):
-        self.sg_home = '/home/pcl/trans_baseline/'
-        self.sgg_config_path = '/home/pcl/pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
+        self.sg_home = SG_HOME + 'trans_baseline/'
+        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
         cfg.merge_from_file(self.sgg_config_path)
         self.transforms = build_transforms(cfg, False)
         self.crop_size = {"height": 600, "width": 600}
@@ -110,15 +111,15 @@ class ResidualAttentionBlock(nn.Module):
 class SGAdapter(nn.Module): ## projector = SGAdapter() MLP()
     def __init__(self):
         super().__init__()
-        self.sg_home = '/home/pcl/trans_baseline/'
-        self.sgg_config_path = '/home/pcl/pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
+        self.sg_home = SG_HOME + 'trans_baseline/'
+        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
         self.sgg_model_dir = self.sg_home
         self.sgg_model_path = self.sg_home + 'model_final.pth'
         cache_file = torch.load(self.sg_home + 'VG_stanford_filtered_with_attribute_train_statistics.cache')
         self.rel_classes = cache_file['rel_classes']
         self.obj_classes = cache_file['obj_classes']
         self.hidden_size = 4096
-        self.GLOVE_DIR = '/home/pcl/glove'
+        self.GLOVE_DIR = SG_HOME + 'glove'
         self.embed_dim = 200
         obj_embed_vecs = obj_edge_vectors(self.obj_classes, wv_dir=self.GLOVE_DIR, wv_dim=self.embed_dim)
         rel_embed_vecs = rel_vectors(self.rel_classes, wv_dir=self.GLOVE_DIR, wv_dim=self.embed_dim)
@@ -184,14 +185,14 @@ class SGVisionTower(nn.Module):
         self.image_processor = None
         self.is_loaded = False
         self.is_fp16 = False
-        self.sg_home = '/home/pcl/trans_baseline/'
-        self.sgg_config_path = '/home/pcl/pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
+        self.sg_home = SG_HOME + 'trans_baseline/'
+        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
         self.sgg_model_dir = self.sg_home
         self.sgg_model_path = self.sg_home + 'model_final.pth'
         cache_file = torch.load(self.sg_home + 'VG_stanford_filtered_with_attribute_train_statistics.cache')
         self.rel_classes = cache_file['rel_classes']
         self.obj_classes = cache_file['obj_classes']
-        self.GLOVE_DIR = '/home/pcl/glove'
+        self.GLOVE_DIR = SG_HOME + 'glove'
 
         cfg.merge_from_file(self.sgg_config_path)
         cfg.OUTPUT_DIR = self.sgg_model_dir
