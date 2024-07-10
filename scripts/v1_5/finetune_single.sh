@@ -1,5 +1,8 @@
 #!/bin/bash
 
+MODEL_NAME=llava-llama3-graph
+PRETRAIN_MODEL_NAME=${MODEL_NAME}-pretrain
+
 accelerate launch \
     --config_file single_node_zero3.yaml \
     llava/train/train_mem.py \
@@ -11,7 +14,7 @@ accelerate launch \
     --vision_tower moe-vision-tower \
     --vision_experts_list microsoft/layoutlmv3-large facebook/dinov2-giant openai/clip-vit-large-patch14-336 \
     --m_token_one_patch 2 2 1 \
-    --pretrain_mm_mlp_adapter ./checkpoints/llava-llama3-mousi-pretrain-toy/mm_projector.bin \
+    --pretrain_mm_mlp_adapter ./checkpoints/${PRETRAIN_MODEL_NAME}-toy/mm_projector.bin \
     --mm_projector_type mousi \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
@@ -19,7 +22,7 @@ accelerate launch \
     --image_aspect_ratio pad \
     --group_by_modality_length True \
     --bf16 True \
-    --output_dir ./checkpoints/llava-llama3-mousi-toy \
+    --output_dir ./checkpoints/${MODEL_NAME}-toy \
     --num_train_epochs 1 \
     --per_device_train_batch_size 2 \
     --per_device_eval_batch_size 4 \

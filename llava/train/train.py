@@ -879,10 +879,7 @@ class DataCollatorForSupervisedDataset(object):
             images = [instance['image'] for instance in instances]
             # moe-vision-tower
             if all(type(image) == list and len(image) == len(images[0]) for image in images):
-                image_list = []
-                for i in range(len(images[0])):
-                    image_list.append(torch.stack([image[i] for image in images]))
-                batch['images'] = image_list
+                batch['images'] = images
             elif all(x is not None and x.shape == images[0].shape for x in images):
                 batch['images'] = torch.stack(images)
             else:

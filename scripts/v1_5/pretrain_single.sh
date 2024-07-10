@@ -1,5 +1,8 @@
 #!/bin/bash
 # openai/clip-vit-large-patch14-336 
+MODEL_NAME=llava-llama3-graph
+PRETRAIN_MODEL_NAME=${MODEL_NAME}-pretrain
+
 accelerate launch \
     --config_file single_node_zero2.yaml \
     llava/train/train_mem.py \
@@ -17,7 +20,7 @@ accelerate launch \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./checkpoints/llava-llama3-mousi-pretrain-toy \
+    --output_dir ./checkpoints/${PRETRAIN_MODEL_NAME}-toy \
     --num_train_epochs 1 \
     --per_device_train_batch_size 5 \
     --per_device_eval_batch_size 4 \

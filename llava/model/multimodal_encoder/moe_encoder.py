@@ -5,6 +5,7 @@ import torch.nn as nn
 from transformers import AutoImageProcessor, AutoModel, AutoConfig
 from transformers import CLIPVisionModel, LayoutLMv3Model, Dinov2Model
 from transformers import BitImageProcessor, LayoutLMv3ImageProcessor, CLIPImageProcessor
+from .graph_encoder import SGVisionTower, GraphProcessor
 
 
 class MoEVisionTower(nn.Module):
@@ -53,12 +54,16 @@ class MoEVisionTower(nn.Module):
             elif expert == 'microsoft/layoutlmv3-large':
                 LayoutLMv3Model._no_split_modules = ["LayoutLMv3Layer"]
                 self.encoders_list.append(AutoModel.from_pretrained(expert, device_map=device_map))
-            elif 'graph' in expert:
-                raise NotImplementedError('graph encoder not implemented.')
+            elif expert == 'graph_encoder':
+                graph_encoder = SGVisionTower()
+                graph_encoder.eval()
+                self.encoders_list.append(graph_encoder)
             else:
                 raise NotImplementedError(expert + ' encoder not implemented.')
             # print(self.encoders_list[-1], self.encoders_list[-1]._no_split_modules)
         self.encoders_list.requires_grad_(False)
+        # for encoder in self.encoders_list:
+        #     encoder = encoder.eval()
         # print(list(map(lambda encoder: type(encoder), self.encoders_list)))
         # print(self.encoders_list)
 
@@ -76,27 +81,37 @@ class MoEVisionTower(nn.Module):
 
     @torch.no_grad()
     def forward(self, images):
+        '''
+        images: [[image1_clip, image1_dino, image1_ocr], [image2_clip, image2_dino, image2_ocr], ...] all Tensor
+        '''
+        # encoder_image_list: [[image1_clip, image2_clip, ...], [image1_dino, image2_dino, ...], [image1_ocr, image2_ocr, ...]]
+        encoder_image_list = [[image[i] for image in images] for i in range(len(images[0]))]
         image_features_list = []
         devices = self.device
         dtypes = self.dtype
-        assert len(images) == len(self.experts_list), (len(images), len(self.experts_list))
+        assert len(encoder_image_list) == len(self.experts_list), (len(images), len(self.experts_list))
         for i, expert in enumerate(self.experts_list):
-            image = images[i].to(device=devices[i], dtype=dtypes[i])
             if expert == 'openai/clip-vit-large-patch14-336':
+                image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])
                 image_forward_outs = self.encoders_list[i](image, output_hidden_states=True)
             elif expert == 'facebook/dinov2-giant':
+                image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])
                 image_forward_outs = self.encoders_list[i](pixel_values=image, output_hidden_states=True)
             elif expert == 'facebook/dinov2-large':
+                image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])
                 image_forward_outs = self.encoders_list[i](pixel_values=image, output_hidden_states=True)
             elif expert == 'microsoft/layoutlmv3-large':
+                image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])
                 image_forward_outs = self.encoders_list[i](pixel_values=image, output_hidden_states=True)
-            elif 'graph' in expert:
-                raise NotImplementedError('graph encoder not implemented.')
+            elif expert == 'graph_encoder':
+                image_features_graph = self.encoders_list[i](encoder_image_list[i])
+                image_features_list.append(image_features_graph)
+                continue
             else:
                 raise NotImplementedError(expert + ' encoder not implemented.')
-
+            # image_forward_outs: bs * num_tokens * hidden_size
             # print('expert:', expert, len(image_forward_outs.hidden_states), image_forward_outs.hidden_states[-2].shape, self.select_layer)
-            image_features = self.feature_select(image_forward_outs).to(images[i].dtype)
+            image_features = self.feature_select(image_forward_outs).to(dtypes[i])
             image_features_list.append(image_features)
 
         return image_features_list
@@ -131,8 +146,8 @@ class MoEImageProcessor:
             elif expert == 'microsoft/layoutlmv3-large':
                 self.processors_list.append(AutoImageProcessor.from_pretrained(expert))
                 self.processors_list[-1].apply_ocr = False
-            elif 'graph' in expert:
-                raise NotImplementedError('graph encoder not implemented.')
+            elif expert == 'graph_encoder':
+                self.processors_list.append(GraphProcessor())
             else:
                 raise NotImplementedError(expert + ' encoder not implemented.')
             # print(expert, self.processors_list[-1])
@@ -159,8 +174,8 @@ class MoEImageProcessor:
                 crop_size = self.processors_list[i].crop_size
             elif expert == 'microsoft/layoutlmv3-large':
                 crop_size = self.processors_list[i].size
-            elif 'graph' in expert:
-                raise NotImplementedError('graph encoder not implemented.')
+            elif expert == 'graph_encoder':
+                crop_size = self.processors_list[i].crop_size
             else:
                 raise NotImplementedError(expert + ' encoder not implemented.')
             dummy_image_list.append(torch.zeros(3, crop_size['height'], crop_size['width']))
@@ -171,5 +186,9 @@ class MoEImageProcessor:
         processed_image_list = []
         assert len(image_list) == len(self.processors_list), (len(image_list), len(self.processors_list))
         for i, processor in enumerate(self.processors_list):
-            processed_image_list.append(processor.preprocess(image_list[i], return_tensors='pt')['pixel_values'][0])
+            out = processor.preprocess(image_list[i], return_tensors='pt')
+            if not isinstance(out, torch.Tensor):
+                processed_image_list.append(out['pixel_values'][0])
+            else:
+                processed_image_list.append(out)
         return processed_image_list

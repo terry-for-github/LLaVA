@@ -1,5 +1,9 @@
 #!/bin/bash
 # microsoft/layoutlmv3-large facebook/dinov2-giant
+
+MODEL_NAME=llava-llama3-graph
+PRETRAIN_MODEL_NAME=${MODEL_NAME}-pretrain
+
 accelerate launch \
     --config_file double_nodes_${1}_zero2.yaml \
     --main_process_ip $2 \
@@ -10,15 +14,15 @@ accelerate launch \
     --data_path ./playground/data/LLaVA-Pretrain/blip_laion_cc_sbu_558k.json \
     --image_folder ./playground/data/LLaVA-Pretrain/images \
     --vision_tower moe-vision-tower\
-    --vision_experts_list openai/clip-vit-large-patch14-336 \
-    --m_token_one_patch 1 \
+    --vision_experts_list openai/clip-vit-large-patch14-336 graph_encoder\
+    --m_token_one_patch 1 1 \
     --mm_projector_type mousi \
     --tune_mm_mlp_adapter True \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./checkpoints/llava-llama3-mousi-onlyclip-pretrain \
+    --output_dir ./checkpoints/$PRETRAIN_MODEL_NAME-pretrain \
     --num_train_epochs 1 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 4 \
