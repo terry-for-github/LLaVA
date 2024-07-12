@@ -18,8 +18,9 @@ from PIL import Image
 from maskrcnn_benchmark.data.transforms import build_transforms
 from maskrcnn_benchmark.modeling.roi_heads.relation_head.utils_motifs import obj_edge_vectors, rel_vectors
 
-SG_HOME = '/userhome/sg_encoder/'
-SG_MODEL = 'sgdet_trans_baseline/'
+SG_HOME = '/userhome/sg_encoder/' # /home/ocl/
+SG_MODEL = 'sgdet_trans_baseline/' # trans_baseline/
+SG_YAML = 'e2e_relation_X_101_32_8_FPN_1x.yaml' # 'e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
 
 def hex_to_bgr(hex_color):
     # 去掉颜色代码中的'#'号
@@ -59,7 +60,7 @@ class Transformer(nn.Module):
 class GraphProcessor(object):
     def __init__(self):
         self.sg_home = SG_HOME + SG_MODEL
-        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
+        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/configs/' + SG_YAML
         cfg.merge_from_file(self.sgg_config_path)
         self.transforms = build_transforms(cfg, False)
         self.crop_size = {"height": 600, "width": 600}
@@ -113,7 +114,7 @@ class SGAdapter(nn.Module): ## projector = SGAdapter() MLP()
     def __init__(self):
         super().__init__()
         self.sg_home = SG_HOME + SG_MODEL
-        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
+        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/configs/' + SG_YAML
         self.sgg_model_dir = self.sg_home
         self.sgg_model_path = self.sg_home + 'model_final.pth'
         cache_file = torch.load(self.sg_home + 'VG_stanford_filtered_with_attribute_train_statistics.cache')
@@ -187,7 +188,7 @@ class SGVisionTower(nn.Module):
         self.is_loaded = False
         self.is_fp16 = False
         self.sg_home = SG_HOME + SG_MODEL
-        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/' + 'configs/e2e_merge_relation_X_101_32_8_FPN_1x.yaml'
+        self.sgg_config_path = SG_HOME + 'pure_sgg_without_csrc/configs/' + SG_YAML
         self.sgg_model_dir = self.sg_home
         self.sgg_model_path = self.sg_home + 'model_final.pth'
         cache_file = torch.load(self.sg_home + 'VG_stanford_filtered_with_attribute_train_statistics.cache')
@@ -203,6 +204,7 @@ class SGVisionTower(nn.Module):
         cfg.MODEL.ROI_RELATION_HEAD.PREDICTOR = 'TransformerPredictor'
         cfg.MODEL.ROI_RELATION_HEAD.PREDICT_USE_BIAS = True
         cfg.MODEL.ROI_RELATION_HEAD.RETURN_GRAPH_EMBEDDING = False
+        cfg.MODEL.ROI_HEADS.DETECTIONS_PER_IMG = 72 ## 16
         cfg.TEST.CUSTUM_EVAL = True
         cfg.hidden_size = 'sg_size'
         cfg.freeze()

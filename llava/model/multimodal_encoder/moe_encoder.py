@@ -89,7 +89,7 @@ class MoEVisionTower(nn.Module):
         image_features_list = []
         devices = self.device
         dtypes = self.dtype
-        assert len(encoder_image_list) == len(self.experts_list), (len(images), len(self.experts_list))
+        assert len(encoder_image_list) == len(self.experts_list), (len(encoder_image_list), len(self.experts_list))
         for i, expert in enumerate(self.experts_list):
             if expert == 'openai/clip-vit-large-patch14-336':
                 image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])

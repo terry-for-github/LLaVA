@@ -103,12 +103,15 @@ def eval_model(args):
             conv.append_message(conv.roles[1], None)
             prompt = conv.get_prompt()
 
-            input_ids = tokenizer_image_token_llama3(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+            if 'llama3' in args.model_path:
+                input_ids = tokenizer_image_token_llama3(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+            else:
+                input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
 
             image_tensor = process_images([image], image_processor, model.config)[0]
 
             if model.config.vision_tower == 'moe-vision-tower':
-                image_tensor = [inside_image_tensor.unsqueeze(0).half().cuda() for inside_image_tensor in image_tensor]
+                image_tensor = [[inside_image_tensor.half().cuda() for inside_image_tensor in image_tensor]]
             else:
                 image_tensor = image_tensor.unsqueeze(0).half().cuda()
 

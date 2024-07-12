@@ -28,7 +28,7 @@ class MousiProjector(nn.Module):
             # m-patches-one-token
             # image_features: bs, num_patches, hidden_size
             # graph_encoder'm must be 1
-            if type(image_features) == torch.tensor:
+            if type(image_features) == torch.Tensor and self.m_list[i] > 1:
                 bs, num_patches, _ = image_features.shape
                 image_features = image_features.view(bs, num_patches // self.m_list[i], -1)
             hidden_features_list.append(self.mlp1_list[i](image_features))

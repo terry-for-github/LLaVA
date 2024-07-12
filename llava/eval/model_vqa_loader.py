@@ -9,7 +9,7 @@ from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_S
 from llava.conversation import conv_templates, SeparatorStyle
 from llava.model.builder import load_pretrained_model
 from llava.utils import disable_torch_init
-from llava.mm_utils import tokenizer_image_token_llama3, process_images, get_model_name_from_path
+from llava.mm_utils import tokenizer_image_token_llama3, process_images, get_model_name_from_path, tokenizer_image_token
 from torch.utils.data import Dataset, DataLoader
 
 from PIL import Image
@@ -52,8 +52,10 @@ class CustomDataset(Dataset):
 
         image = Image.open(os.path.join(self.image_folder, image_file)).convert('RGB')
         image_tensor = process_images([image], self.image_processor, self.model_config)[0]
-
-        input_ids = tokenizer_image_token_llama3(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt')
+        if 'llama3' in self.model_config._name_or_path:
+            input_ids = tokenizer_image_token_llama3(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt')
+        else:
+            input_ids = tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt')
 
         return input_ids, image_tensor, image.size
 
@@ -70,7 +72,7 @@ def collate_fn(batch):
 def moe_collate_fn(batch):
     input_ids, image_tensors, image_sizes = zip(*batch)
     input_ids = torch.stack(input_ids, dim=0)
-    image_tensors = [torch.stack([image_tensor[i] for image_tensor in image_tensors], dim=0) for i in range(len(image_tensors[0]))]
+    # image_tensors = [torch.stack([image_tensor[i] for image_tensor in image_tensors], dim=0) for i in range(len(image_tensors[0]))]
     return input_ids, image_tensors, image_sizes
 
 
@@ -108,8 +110,8 @@ def eval_model(args):
 
         input_ids = input_ids.to(device='cuda', non_blocking=True)
         if model.config.vision_tower == 'moe-vision-tower':
-            image_tensor = [inside_image_tensor.to(dtype=torch.float16, device='cuda', non_blocking=True)
-                            for inside_image_tensor in image_tensor]
+            image_tensor = [[inside_image_tensor.to(dtype=torch.float16, device='cuda', non_blocking=True) for inside_image_tensor in encoder_image_tensor]
+                            for encoder_image_tensor in image_tensor]
         else:
             image_tensor = image_tensor.to(dtype=torch.float16, device='cuda', non_blocking=True)
 
