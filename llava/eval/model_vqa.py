@@ -9,7 +9,7 @@ from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_S
 from llava.conversation import conv_templates, SeparatorStyle
 from llava.model.builder import load_pretrained_model
 from llava.utils import disable_torch_init
-from llava.mm_utils import tokenizer_image_token_llama3, process_images, get_model_name_from_path
+from llava.mm_utils import tokenizer_image_token_llama3, process_images, get_model_name_from_path, tokenizer_image_token
 
 from PIL import Image
 import math
@@ -53,15 +53,22 @@ def eval_model(args):
         conv.append_message(conv.roles[1], None)
         prompt = conv.get_prompt()
 
-        input_ids = tokenizer_image_token_llama3(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+        if 'llama3' in args.model_path:
+            input_ids = tokenizer_image_token_llama3(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+        else:
+            input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
 
         image = Image.open(os.path.join(args.image_folder, image_file)).convert('RGB')
         image_tensor = process_images([image], image_processor, model.config)[0]
+        if model.config.vision_tower == 'moe-vision-tower':
+            image_tensor = [[inside_image_tensor.half().cuda() for inside_image_tensor in image_tensor]]
+        else:
+            image_tensor = image_tensor.unsqueeze(0).half().cuda()
 
         with torch.inference_mode():
             output_ids = model.generate(
                 input_ids,
-                images=image_tensor.unsqueeze(0).half().cuda(),
+                images=image_tensor,
                 image_sizes=[image.size],
                 do_sample=True if args.temperature > 0 else False,
                 temperature=args.temperature,

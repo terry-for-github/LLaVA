@@ -49,7 +49,7 @@ def eval_model(args):
             image = Image.open(os.path.join(args.image_folder, image_file))
             image_tensor = process_images([image], image_processor, model.config)[0]
             if model.config.vision_tower == 'moe-vision-tower':
-                image_tensor = [[inside_image_tensor.half().cuda() for inside_image_tensor in image_tensor]]
+                image_tensor = [[inside_image_tensor.unsqueeze(0).half().cuda() for inside_image_tensor in image_tensor]]
             else:
                 image_tensor = image_tensor.unsqueeze(0).half().cuda()
             image_sizes = [image.size]

@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 
 from transformers import AutoImageProcessor, AutoModel, AutoConfig
-from transformers import CLIPVisionModel, LayoutLMv3Model, Dinov2Model
-from transformers import BitImageProcessor, LayoutLMv3ImageProcessor, CLIPImageProcessor
+from transformers import CLIPVisionModel, LayoutLMv3Model, Dinov2Model, SiglipVisionModel
+from transformers import BitImageProcessor, LayoutLMv3ImageProcessor, CLIPImageProcessor, SiglipImageProcessor
 from .graph_encoder import SGVisionTower, GraphProcessor
 
 
@@ -45,16 +45,17 @@ class MoEVisionTower(nn.Module):
                 # defaults setting
                 # CLIPVisionModel._no_split_modules = ['CLIPEncoderLayer']
                 self.encoders_list.append(CLIPVisionModel.from_pretrained(expert, device_map=device_map))
-            elif expert == 'facebook/dinov2-giant':
+            elif expert == 'google/siglip-so400m-patch14-384' or expert == 'google/siglip-large-patch16-384':
+                SiglipVisionModel._no_split_modules = ["SiglipEncoderLayer", "SiglipMultiheadAttentionPoolingHead"]
+                self.encoders_list.append(SiglipVisionModel.from_pretrained(expert, device_map=device_map))
+            elif expert == 'facebook/dinov2-giant' or expert == 'facebook/dinov2-large':
                 Dinov2Model._no_split_modules = ["Dinov2Layer"]
-                self.encoders_list.append(AutoModel.from_pretrained(expert, device_map=device_map))
-            elif expert == 'facebook/dinov2-large':
-                Dinov2Model._no_split_modules = ["Dinov2Layer"]
-                self.encoders_list.append(AutoModel.from_pretrained(expert, device_map=device_map))
+                self.encoders_list.append(Dinov2Model.from_pretrained(expert, device_map=device_map))
             elif expert == 'microsoft/layoutlmv3-large':
                 LayoutLMv3Model._no_split_modules = ["LayoutLMv3Layer"]
-                self.encoders_list.append(AutoModel.from_pretrained(expert, device_map=device_map))
+                self.encoders_list.append(LayoutLMv3Model.from_pretrained(expert, device_map=device_map))
             elif expert == 'graph_encoder':
+                SGVisionTower._no_split_modules = ["GeneralizedRCNN"]
                 graph_encoder = SGVisionTower()
                 graph_encoder.eval()
                 self.encoders_list.append(graph_encoder)
@@ -85,23 +86,22 @@ class MoEVisionTower(nn.Module):
         images: [[image1_clip, image1_dino, image1_ocr], [image2_clip, image2_dino, image2_ocr], ...] all Tensor
         '''
         # encoder_image_list: [[image1_clip, image2_clip, ...], [image1_dino, image2_dino, ...], [image1_ocr, image2_ocr, ...]]
+        # print('self.dtype:', self.dtype)
         encoder_image_list = [[image[i] for image in images] for i in range(len(images[0]))]
         image_features_list = []
         devices = self.device
         dtypes = self.dtype
         assert len(encoder_image_list) == len(self.experts_list), (len(encoder_image_list), len(self.experts_list))
         for i, expert in enumerate(self.experts_list):
-            if expert == 'openai/clip-vit-large-patch14-336':
+            if expert != 'graph_encoder':
                 image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])
-                image_forward_outs = self.encoders_list[i](image, output_hidden_states=True)
-            elif expert == 'facebook/dinov2-giant':
-                image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])
-                image_forward_outs = self.encoders_list[i](pixel_values=image, output_hidden_states=True)
-            elif expert == 'facebook/dinov2-large':
-                image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])
-                image_forward_outs = self.encoders_list[i](pixel_values=image, output_hidden_states=True)
-            elif expert == 'microsoft/layoutlmv3-large':
-                image = torch.stack(encoder_image_list[i]).to(device=devices[i], dtype=dtypes[i])
+
+            if expert in [
+                'openai/clip-vit-large-patch14-336',
+                'google/siglip-so400m-patch14-384', 'google/siglip-large-patch16-384',
+                'facebook/dinov2-giant', 'facebook/dinov2-large',
+                'microsoft/layoutlmv3-large'
+            ]:
                 image_forward_outs = self.encoders_list[i](pixel_values=image, output_hidden_states=True)
             elif expert == 'graph_encoder':
                 image_features_graph = self.encoders_list[i](encoder_image_list[i])
@@ -135,16 +135,16 @@ class MoEImageProcessor:
         self.experts_list = experts_list
         for expert in self.experts_list:
             if expert == 'openai/clip-vit-large-patch14-336':
-                self.processors_list.append(AutoImageProcessor.from_pretrained(expert))
+                self.processors_list.append(CLIPImageProcessor.from_pretrained(expert))
                 self.processors_list[-1].do_convert_rgb = False
-            elif expert == 'facebook/dinov2-giant':
-                self.processors_list.append(AutoImageProcessor.from_pretrained(expert))
+            elif expert == 'google/siglip-so400m-patch14-384' or expert == 'google/siglip-large-patch16-384':
+                self.processors_list.append(SiglipImageProcessor.from_pretrained(expert))
                 self.processors_list[-1].do_convert_rgb = False
-            elif expert == 'facebook/dinov2-large':
-                self.processors_list.append(AutoImageProcessor.from_pretrained(expert))
+            elif expert == 'facebook/dinov2-giant' or expert == 'facebook/dinov2-large':
+                self.processors_list.append(BitImageProcessor.from_pretrained(expert))
                 self.processors_list[-1].do_convert_rgb = False
             elif expert == 'microsoft/layoutlmv3-large':
-                self.processors_list.append(AutoImageProcessor.from_pretrained(expert))
+                self.processors_list.append(LayoutLMv3ImageProcessor.from_pretrained(expert))
                 self.processors_list[-1].apply_ocr = False
             elif expert == 'graph_encoder':
                 self.processors_list.append(GraphProcessor())
@@ -168,9 +168,9 @@ class MoEImageProcessor:
         for i, expert in enumerate(self.experts_list):
             if expert == 'openai/clip-vit-large-patch14-336':
                 crop_size = self.processors_list[i].crop_size
-            elif expert == 'facebook/dinov2-giant':
-                crop_size = self.processors_list[i].crop_size
-            elif expert == 'facebook/dinov2-large':
+            elif expert == 'google/siglip-so400m-patch14-384' or expert == 'google/siglip-large-patch16-384':
+                crop_size = self.processors_list[i].size
+            elif expert == 'facebook/dinov2-giant' or expert == 'facebook/dinov2-large':
                 crop_size = self.processors_list[i].crop_size
             elif expert == 'microsoft/layoutlmv3-large':
                 crop_size = self.processors_list[i].size

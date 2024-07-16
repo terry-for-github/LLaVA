@@ -195,7 +195,6 @@ class SGVisionTower(nn.Module):
         self.rel_classes = cache_file['rel_classes']
         self.obj_classes = cache_file['obj_classes']
         self.GLOVE_DIR = SG_HOME + 'glove'
-
         cfg.merge_from_file(self.sgg_config_path)
         cfg.OUTPUT_DIR = self.sgg_model_dir
         cfg.GLOVE_DIR = self.GLOVE_DIR
@@ -210,11 +209,12 @@ class SGVisionTower(nn.Module):
         cfg.freeze()
         self.config = cfg
         self.cfg = cfg
-        self.sgg_model = build_detection_model(self.cfg)
+        self.sgg_model = torch.load(SG_HOME + SG_MODEL + 'model_all.pth')
+        # self.sgg_model = build_detection_model(self.cfg)
         self.sgg_model.eval()
-        checkpoint = torch.load(self.sgg_model_path, map_location=self.device)
-        load_mapping = {}
-        load_state_dict(self.sgg_model, checkpoint.pop("model"), load_mapping)
+        # checkpoint = torch.load(self.sgg_model_path, map_location=self.device)
+        # load_mapping = {}
+        # load_state_dict(self.sgg_model, checkpoint.pop("model"), load_mapping)
         self.is_loaded = True
         self.dtype = torch.float16
 
