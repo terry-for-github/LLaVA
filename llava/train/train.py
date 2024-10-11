@@ -73,6 +73,7 @@ class DataArguments:
     lazy_preprocess: bool = False
     is_multimodal: bool = False
     image_folder: Optional[str] = field(default=None)
+    one_vision: Optional[str] = field(default=None)
     image_aspect_ratio: str = 'square'
 
 
@@ -739,6 +740,39 @@ class LazySupervisedDataset(Dataset):
         return data_dict
 
 
+class OneVisionDataset(LazySupervisedDataset):
+    """Dataset for supervised fine-tuning."""
+
+    def __init__(self, data_path: str,
+                 tokenizer: transformers.PreTrainedTokenizer,
+                 data_args: DataArguments):
+        super(LazySupervisedDataset, self).__init__()
+        dataset_list = os.listdir(data_path)
+        json_list = []
+        for dataset in dataset_list:
+            if dataset in ['cambrian(filtered)', 'ureader_kg', 'ureader_qa']:
+                json_list.append(os.path.join(data_path, dataset, dataset+'_processed.json'))
+            else:
+                json_list.append(os.path.join(data_path, dataset, dataset+'_anno.json'))
+        list_data_dict = []
+        for i in range(len(dataset_list)):
+            rank0_print('Loading', json_list[i], '...')
+            data_list = json.load(open(json_list[i], 'r'))
+            if dataset_list[i] == 'hme100k':
+                # these images are not available
+                for bad_index in [49533, 49499, 49496, 49493, 49492, 49477, 49464, 49445, 49434, 49420, 49394, 49391, 49366, 49346]:
+                    del data_list[bad_index]
+            if dataset_list[i] in ['cambrian(filtered)', 'ureader_kg', 'ureader_qa']:
+                for data_dict in data_list:
+                    data_dict['image'] = dataset_list[i] + '/' + data_dict['image']
+            list_data_dict.extend(data_list)
+
+        rank0_print("Formatting inputs...Skip in lazy mode")
+        self.tokenizer = tokenizer
+        self.list_data_dict = list_data_dict
+        self.data_args = data_args
+
+
 @dataclass
 class DataCollatorForSupervisedDataset(object):
     """Collate examples for supervised fine-tuning."""
@@ -776,9 +810,14 @@ class DataCollatorForSupervisedDataset(object):
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                 data_args) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    train_dataset = LazySupervisedDataset(tokenizer=tokenizer,
-                                data_path=data_args.data_path,
-                                data_args=data_args)
+    if data_args.one_vision is None:
+        train_dataset = LazySupervisedDataset(tokenizer=tokenizer,
+                                    data_path=data_args.data_path,
+                                    data_args=data_args)
+    else:
+        train_dataset = OneVisionDataset(tokenizer=tokenizer,
+                                    data_path=data_args.one_vision,
+                                    data_args=data_args)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset,
                 eval_dataset=None,
