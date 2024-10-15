@@ -15,11 +15,11 @@ deepspeed llava/train/train_mem.py \
     --image_aspect_ratio pad \
     --group_by_modality_length False \
     --bf16 True \
-    --output_dir ./ckpts/llava-qwen25-05b \
+    --output_dir ./ckpts/llava-qwen25-3b \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 8 \
+    --per_device_train_batch_size 4 \
     --per_device_eval_batch_size 4 \
-    --gradient_accumulation_steps 2 \
+    --gradient_accumulation_steps 4 \
     --eval_strategy "no" \
     --save_strategy "steps" \
     --save_steps 50000 \
@@ -32,6 +32,7 @@ deepspeed llava/train/train_mem.py \
     --tf32 True \
     --model_max_length 2048 \
     --gradient_checkpointing True \
+    --gradient_checkpointing_kwargs {\"use_reentrant\":false} \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to none
