@@ -9,7 +9,7 @@ accelerate launch \
     --main_process_ip $VC_TASK0_HOSTS \
     llava/train/train_mem.py \
     --deepspeed ./scripts/zero0.json \
-    --model_name_or_path Qwen/Qwen2.5-7B-Instruct \
+    --model_name_or_path lmsys/vicuna-7b-v1.5 \
     --version plain \
     --data_path ./playground/pretrain/blip_laion_cc_sbu_558k.json \
     --image_folder ./playground/pretrain/images \
@@ -20,11 +20,11 @@ accelerate launch \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./ckpts/llava-qwen25-7b-pretrain \
+    --output_dir ./ckpts/llava-v1.5-7b-pretrain \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 8 \
+    --per_device_train_batch_size 16 \
     --per_device_eval_batch_size 4 \
-    --gradient_accumulation_steps 2 \
+    --gradient_accumulation_steps 1 \
     --save_strategy "steps" \
     --save_steps 24000 \
     --save_total_limit 1 \
