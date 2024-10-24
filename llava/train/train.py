@@ -410,6 +410,97 @@ def preprocess_llama_2(
         labels=targets,
     )
 
+def preprocess_llama3(
+    sources,
+    tokenizer: transformers.PreTrainedTokenizer,
+    has_image: bool = False,
+    max_len=2048,
+    system_message: str = "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.",
+) -> Dict:
+    # roles = {"human": "<|start_header_id|>user<|end_header_id|>", "gpt": "<|start_header_id|>assistant<|end_header_id|>"}
+    roles = {"human": "user", "gpt": "assistant"}
+
+    # Add image tokens to tokenizer as a special tokens
+    # Use a deepcopy of tokenizer so that we don't modify on the tokenizer
+    tokenizer = copy.deepcopy(tokenizer)
+    # When there is actually an image, we add the image tokens as a special token
+    if has_image:
+        tokenizer.add_tokens(["<image>"], special_tokens=True)
+    image_token_index = tokenizer.convert_tokens_to_ids("<image>")
+    bos_token_id = tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
+    start_header_id = tokenizer.convert_tokens_to_ids("<|start_header_id|>")
+    end_header_id = tokenizer.convert_tokens_to_ids("<|end_header_id|>")
+    eot_id = tokenizer.convert_tokens_to_ids("<|eot_id|>")
+
+    # unmask_tokens = ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"]
+    unmask_tokens_idx = [start_header_id, end_header_id]
+
+    # Apply prompt templates
+    input_ids, targets = [], []
+    for i, source in enumerate(sources):
+        if roles[source[0]["from"]] != roles["human"]:
+            source = source[1:]
+
+        input_id, target = [], []
+
+        # New version, use apply chat template
+        # Build system message for each sentence
+        input_id += tokenizer.apply_chat_template([{"role" : "system", "content" : system_message}])
+        target += [IGNORE_INDEX] * len(input_id)
+
+        for conv in source:
+            # Make sure llava data can load
+            try:
+                role = conv["role"]
+                content = conv["content"]
+            except:
+                role = conv["from"]
+                content = conv["value"]
+
+            role =  roles.get(role, role)
+            
+            conv = [{"role" : role, "content" : content}]
+            # First is bos token we don't need here
+            encode_id = tokenizer.apply_chat_template(conv)
+            eot_idx = encode_id.index(eot_id)
+            encode_id = encode_id[eot_idx+1:]
+            input_id += encode_id
+            if role in ["user", "system"]:
+                target += [IGNORE_INDEX] * len(encode_id)
+            else:
+                target += encode_id
+
+        assert len(input_id) == len(target), f"{len(input_id)} != {len(target)}"
+        role_flag = 0
+        for idx, encode_id in enumerate(input_id):
+            if role_flag > 0:
+                target[idx] = encode_id
+                role_flag -= 1
+
+            if encode_id in unmask_tokens_idx:
+                target[idx] = encode_id
+                if encode_id == start_header_id:
+                    role_flag = 3
+
+            if encode_id == image_token_index:
+                input_id[idx] = IMAGE_TOKEN_INDEX
+        
+        input_ids.append(input_id)
+        targets.append(target)
+        # for in_id, tar_id in zip(input_id, target):
+        #     in_str = tokenizer.decode(in_id) if in_id != -200 else '<image>'
+        #     tar_str = tokenizer.decode(tar_id) if tar_id != -100 else 'IGNORE'
+        #     in_str = '\\n\\n' if in_str == '\n\n' else in_str
+        #     tar_str = '\\n\\n' if tar_str == '\n\n' else tar_str
+        #     rank0_print('%20s'%in_str, '\t', '%20s'%tar_str)
+        # rank0_print('\n')
+    input_ids = torch.tensor(input_ids, dtype=torch.long)
+    targets = torch.tensor(targets, dtype=torch.long)
+
+    return dict(
+        input_ids=input_ids,  # tensor(bs x seq_len)
+        labels=targets,  # tensor(bs x seq_len)
+    )
 
 def preprocess_v1(
     sources,
@@ -627,6 +718,8 @@ def preprocess(
         return preprocess_v1(sources, tokenizer, has_image=has_image)
     if conversation_lib.default_conversation.version == "mpt":
         return preprocess_mpt(sources, tokenizer, has_image=has_image)
+    if conversation_lib.default_conversation.version == "llama3":
+        return preprocess_llama3(sources, tokenizer, has_image=has_image)
     # add end signal and concatenate together
     conversations = []
     for source in sources:
@@ -901,7 +994,10 @@ def train(attn_implementation=None):
     elif model_args.version == "v0.5":
         tokenizer.pad_token = tokenizer.unk_token
     else:
-        tokenizer.pad_token = tokenizer.unk_token
+        if tokenizer.unk_token is not None:
+            tokenizer.pad_token = tokenizer.unk_token
+        if tokenizer.pad_token is None and 'llama-3' in model_args.model_name_or_path.lower():
+            tokenizer.pad_token = '<|finetune_right_pad_id|>'
         if model_args.version in conversation_lib.conv_templates:
             conversation_lib.default_conversation = conversation_lib.conv_templates[model_args.version]
         else:
