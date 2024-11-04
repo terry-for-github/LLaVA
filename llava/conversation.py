@@ -67,7 +67,8 @@ class Conversation:
                     ret += role + ":"
         elif self.sep_style == SeparatorStyle.LLAMA_3:
             if self.tokenizer is None:
-                raise ValueError("Llama 3 tokenizer is not available. Make sure you have the necessary permissions.")
+                self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+                # raise ValueError("Llama 3 tokenizer is not available. Make sure you have the necessary permissions.")
             chat_template_messages = [{"role": "system", "content": self.system}]
             for role, message in messages:
                 if message:
