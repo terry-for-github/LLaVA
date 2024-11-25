@@ -2,7 +2,7 @@
 
 deepspeed llava/train/train_mem.py \
     --deepspeed ./scripts/zero0.json \
-    --model_name_or_path meta-llama/Llama-3.2-3B-Instruct \
+    --model_name_or_path meta-llama/Llama-3.2-1B-Instruct \
     --version plain \
     --data_path ./playground/pretrain/blip_laion_cc_sbu_558k.json \
     --image_folder ./playground/pretrain/images \
@@ -13,13 +13,11 @@ deepspeed llava/train/train_mem.py \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./ckpts/llava-llama32-3b-pretrain-test \
+    --output_dir ./ckpts/llava-llama32-1b-pretrain-test \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 16 \
+    --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 2 \
-    --save_strategy "steps" \
-    --save_steps 24000 \
-    --save_total_limit 1 \
+    --save_strategy "no" \
     --learning_rate 1e-3 \
     --weight_decay 0. \
     --warmup_ratio 0.03 \
@@ -28,6 +26,7 @@ deepspeed llava/train/train_mem.py \
     --tf32 True \
     --model_max_length 2048 \
     --gradient_checkpointing True \
+    --gradient_checkpointing_kwargs {\"use_reentrant\":false} \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to none \

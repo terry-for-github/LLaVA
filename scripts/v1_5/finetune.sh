@@ -2,12 +2,13 @@
 
 deepspeed llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json \
-    --model_name_or_path meta-llama/Llama-3.2-3B-Instruct \
+    --model_name_or_path meta-llama/Llama-3.2-1B-Instruct \
     --version llama3 \
     --data_path ./playground/finetune/llava_v1_5_mix665k.json \
     --image_folder ./playground/finetune \
     --vision_tower openai/clip-vit-large-patch14-336 \
-    --pretrain_mm_mlp_adapter ./ckpts/llava-llama32-3b-pretrain-test/mm_projector.bin \
+    --pretrain_mm_mlp_adapter ./ckpts/llava-llama32-1b-pretrain-test/mm_projector.bin \
+    --pretrain_gcn_adapter ./ckpts/llava-llama32-1b-pretrain-test/gcn_projector.bin \
     --mm_projector_type mlp2x_gelu \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
@@ -15,7 +16,7 @@ deepspeed llava/train/train_mem.py \
     --image_aspect_ratio pad \
     --group_by_modality_length False \
     --bf16 True \
-    --output_dir ./ckpts/llava-llama32-3b-test \
+    --output_dir ./ckpts/llava-llama32-1b-test \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 4 \
@@ -30,6 +31,7 @@ deepspeed llava/train/train_mem.py \
     --tf32 True \
     --model_max_length 2048 \
     --gradient_checkpointing True \
+    --gradient_checkpointing_kwargs {\"use_reentrant\":false} \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to none \

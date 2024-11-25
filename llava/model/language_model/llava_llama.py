@@ -66,7 +66,9 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         images: Optional[torch.FloatTensor] = None,
+        sgg_images: Optional[list[torch.FloatTensor]] = None,
         image_sizes: Optional[List[List[int]]] = None,
+        image_paths: Optional[List[str]] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[int] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
@@ -86,7 +88,9 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 past_key_values,
                 labels,
                 images,
-                image_sizes
+                sgg_images,
+                image_sizes,
+                image_paths
             )
 
         return super().forward(
@@ -109,6 +113,8 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         inputs: Optional[torch.Tensor] = None,
         images: Optional[torch.Tensor] = None,
         image_sizes: Optional[torch.Tensor] = None,
+        sgg_images: Optional[list[torch.FloatTensor]] = None,
+        image_paths: Optional[List[str]] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         position_ids = kwargs.pop("position_ids", None)
@@ -131,7 +137,9 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 None,
                 None,
                 images,
-                image_sizes=image_sizes
+                sgg_images,
+                image_sizes,
+                image_paths
             )
         else:
             inputs_embeds = self.get_model().embed_tokens(inputs)

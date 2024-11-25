@@ -20,10 +20,10 @@ accelerate launch \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./ckpts/llava-llama32-3b-pretrain \
+    --output_dir ./ckpts/llava-llama32-3b-pretrain-sgg-2 \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 16 \
-    --gradient_accumulation_steps 1 \
+    --per_device_train_batch_size 8 \
+    --gradient_accumulation_steps 2 \
     --save_strategy "steps" \
     --save_steps 24000 \
     --save_total_limit 1 \
@@ -35,6 +35,7 @@ accelerate launch \
     --tf32 True \
     --model_max_length 2048 \
     --gradient_checkpointing True \
+    --gradient_checkpointing_kwargs {\"use_reentrant\":false} \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to none

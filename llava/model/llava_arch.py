@@ -20,6 +20,8 @@ import torch.nn as nn
 
 from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector
+from .multimodal_encoder.sgg_encoder import SceneGraphVisionTower
+from .multimodal_projector.gcn import GCN
 
 from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 
@@ -34,6 +36,8 @@ class LlavaMetaModel:
         if hasattr(config, "mm_vision_tower"):
             self.vision_tower = build_vision_tower(config, delay_load=True)
             self.mm_projector = build_vision_projector(config)
+            self.sgg_tower = SceneGraphVisionTower(config.mm_vision_tower, config, delay_load=True)
+            self.gcn_projector = GCN(config.hidden_size)
 
             if 'unpad' in getattr(config, 'mm_patch_merge_type', ''):
                 self.image_newline = nn.Parameter(
@@ -51,13 +55,14 @@ class LlavaMetaModel:
         mm_vision_select_layer = model_args.mm_vision_select_layer
         mm_vision_select_feature = model_args.mm_vision_select_feature
         pretrain_mm_mlp_adapter = model_args.pretrain_mm_mlp_adapter
+        pretrain_gcn_adapter = model_args.pretrain_gcn_adapter
         mm_patch_merge_type = model_args.mm_patch_merge_type
 
         self.config.mm_vision_tower = vision_tower
 
         if self.get_vision_tower() is None:
             vision_tower = build_vision_tower(model_args)
-
+            self.sgg_tower = SceneGraphVisionTower(model_args.vision_tower, model_args)
             if fsdp is not None and len(fsdp) > 0:
                 self.vision_tower = [vision_tower]
             else:
@@ -68,6 +73,7 @@ class LlavaMetaModel:
             else:
                 vision_tower = self.vision_tower
             vision_tower.load_model()
+            self.sgg_tower.load_model()
 
         self.config.use_mm_proj = True
         self.config.mm_projector_type = getattr(model_args, 'mm_projector_type', 'linear')
@@ -78,6 +84,7 @@ class LlavaMetaModel:
 
         if getattr(self, 'mm_projector', None) is None:
             self.mm_projector = build_vision_projector(self.config)
+            self.gcn_projector = GCN(self.config.hidden_size)
 
             if 'unpad' in mm_patch_merge_type:
                 embed_std = 1 / torch.sqrt(torch.tensor(self.config.hidden_size, dtype=self.dtype))
@@ -88,6 +95,8 @@ class LlavaMetaModel:
             # In case it is frozen by LoRA
             for p in self.mm_projector.parameters():
                 p.requires_grad = True
+            for p in self.gcn_projector.parameters():
+                p.requires_grad = True
 
         if pretrain_mm_mlp_adapter is not None:
             mm_projector_weights = torch.load(pretrain_mm_mlp_adapter, map_location='cpu')
@@ -95,6 +104,12 @@ class LlavaMetaModel:
                 return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
 
             self.mm_projector.load_state_dict(get_w(mm_projector_weights, 'mm_projector'))
+        if pretrain_gcn_adapter is not None:
+            gcn_projector_weights = torch.load(pretrain_gcn_adapter, map_location='cpu')
+            def get_w(weights, keyword):
+                return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
+
+            self.gcn_projector.load_state_dict(get_w(gcn_projector_weights, 'gcn_projector'))
 
 
 def unpad_image(tensor, original_size):
@@ -137,14 +152,16 @@ class LlavaMetaForCausalLM(ABC):
     def get_vision_tower(self):
         return self.get_model().get_vision_tower()
 
-    def encode_images(self, images):
-        image_features = self.get_model().get_vision_tower()(images)
-        image_features = self.get_model().mm_projector(image_features)
+    def encode_images(self, images, sgg_images, image_sizes, image_paths):
+        clip_features = self.get_model().get_vision_tower()(images)
+        image_features = self.get_model().mm_projector(clip_features)
+        # aggr_matrix, disp_matrix, node_embeddings = self.get_model().sgg_tower(images=sgg_images, image_sizes=image_sizes, image_features=image_features, image_paths=image_paths, embed_tokens=self.get_model().get_input_embeddings())
+        # gcn_features = self.get_model().gcn_projector(node_embeddings=node_embeddings, aggr_matrix=aggr_matrix, disp_matrix=disp_matrix)
         return image_features
 
     def prepare_inputs_labels_for_multimodal(
         self, input_ids, position_ids, attention_mask, past_key_values, labels,
-        images, image_sizes=None
+        images, sgg_images, image_sizes=None, image_paths=None
     ):
         vision_tower = self.get_vision_tower()
         if vision_tower is None or images is None or input_ids.shape[1] == 1:
@@ -199,7 +216,7 @@ class LlavaMetaForCausalLM(ABC):
             else:
                 raise ValueError(f"Unexpected mm_patch_merge_type: {self.config.mm_patch_merge_type}")
         else:
-            image_features = self.encode_images(images)
+            image_features = self.encode_images(images, sgg_images, image_sizes, image_paths)
 
         # TODO: image start / end is not implemented here to support pretraining.
         if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):

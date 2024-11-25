@@ -21,7 +21,7 @@ accelerate launch \
     --image_aspect_ratio pad \
     --group_by_modality_length False \
     --bf16 True \
-    --output_dir ./ckpts/llava-llama32-3b \
+    --output_dir ./ckpts/llava-llama32-3b-nopad \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 2 \
@@ -36,6 +36,7 @@ accelerate launch \
     --tf32 True \
     --model_max_length 2048 \
     --gradient_checkpointing True \
+    --gradient_checkpointing_kwargs {\"use_reentrant\":false} \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to none
