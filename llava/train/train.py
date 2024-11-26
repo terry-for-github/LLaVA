@@ -1055,7 +1055,7 @@ def train(attn_implementation=None):
     data_module = make_supervised_data_module(tokenizer=tokenizer,
                                               data_args=data_args)
     trainer = LLaVATrainer(model=model,
-                    tokenizer=tokenizer,
+                    processing_class=tokenizer,
                     args=training_args,
                     **data_module)
 
@@ -1081,6 +1081,7 @@ def train(attn_implementation=None):
     else:
         safe_save_model_for_hf_trainer(trainer=trainer,
                                        output_dir=training_args.output_dir)
+    torch.distributed.destroy_process_group()
 
 
 if __name__ == "__main__":

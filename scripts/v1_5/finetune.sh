@@ -17,11 +17,9 @@ deepspeed llava/train/train_mem.py \
     --bf16 True \
     --output_dir ./ckpts/llava-llama32-3b-test \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 4 \
+    --per_device_train_batch_size 8 \
     --gradient_accumulation_steps 4 \
-    --save_strategy "steps" \
-    --save_steps 50000 \
-    --save_total_limit 1 \
+    --save_strategy "no" \
     --learning_rate 2e-5 \
     --weight_decay 0. \
     --warmup_ratio 0.03 \
