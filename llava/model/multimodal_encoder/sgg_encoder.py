@@ -129,11 +129,11 @@ class PostProcessGraph(nn.Module):
         # 1. delete the boxes with score < 0.2
         # 2. also delete the relation that contains the deleted boxes
         # 3. delete the relation with score < 0.2
-        # 4. keep at most 20 boxes and 20 relations
+        # 4. keep at most 32 boxes and 32 relations
         # 5. use the remaining relation to build a graph adj matrix
         # (
-        # a square matrix where side size = 576 + 20 + 20
-        # if the num_boxes and num_relations less than 20, padding to 20 and keeping it empty
+        # a square matrix where side size = 576 + 32 + 32
+        # if the num_boxes and num_relations less than 32, padding to 32 and keeping it empty
         # if node i and node j have a relation k, then adj[i, k] = 1, adj[k, j] = 1
         # if a node i's boxes cover the clip_feature[a:b, c:d], then adj[i, 24*x+y] = 1 adj[24*x+y, i] = 1 for x in [a, b), y in [c, d)
         # )
@@ -147,8 +147,8 @@ class PostProcessGraph(nn.Module):
             pred_boxes = graph['pred_boxes']  # shape (100, 4)
             pred_scores = graph['pred_boxes_score']  # shape (100,)
             pred_classes = graph['pred_boxes_class']  # shape (100,)
-            all_node_pairs = graph['all_node_pairs']  # shape (9900, 2)
-            all_relation_scores = graph['rel_scores']  # shape (9900,)
+            all_rel_pairs = graph['all_node_pairs']  # shape (9900, 2)
+            all_rel_scores = graph['rel_scores']  # shape (9900,)
             all_rel_classes = graph['rel_classes']  # shape (9900,)
             rln_features = graph['rln_features']  # shape (9900, 256)
             dtype = rln_features.dtype
@@ -161,44 +161,48 @@ class PostProcessGraph(nn.Module):
             keep_boxes[self.num_boxes:] = False
 
             # 2. Delete relations with score < score_threshold
-            keep_relations = all_relation_scores > self.rel_threshold
-            all_node_pairs = all_node_pairs[keep_relations]
-            all_relation_scores = all_relation_scores[keep_relations]
+            keep_relations = all_rel_scores > self.rel_threshold
+            all_rel_pairs = all_rel_pairs[keep_relations]
+            all_rel_scores = all_rel_scores[keep_relations]
             all_rel_classes = all_rel_classes[keep_relations]
             # rln_features = rln_features[keep_relations]
 
             # 3. Delete relations that involve deleted boxes (after filtering boxes)
-            src_keep = keep_boxes[all_node_pairs[:, 0]]  # 获取 src 是否保留
-            dst_keep = keep_boxes[all_node_pairs[:, 1]]  # 获取 dst 是否保留
+            src_keep = keep_boxes[all_rel_pairs[:, 0]]  # 获取 src 是否保留
+            dst_keep = keep_boxes[all_rel_pairs[:, 1]]  # 获取 dst 是否保留
             keep_relations = src_keep & dst_keep  # 同时满足 src 和 dst 为 True
 
             # 使用布尔索引过滤 all_node_pairs
-            all_node_pairs = all_node_pairs[keep_relations]
-            all_relation_scores = all_relation_scores[keep_relations]
+            all_rel_pairs = all_rel_pairs[keep_relations]
+            all_rel_scores = all_rel_scores[keep_relations]
             all_rel_classes = all_rel_classes[keep_relations]
             # rln_features = rln_features[keep_relations]
             # 4. Keep at most num_boxes boxes and num_relations relations
             num_boxes = min(self.num_boxes, len(pred_boxes))
-            num_relations = min(self.num_relations, len(all_node_pairs))
+            num_relations = min(self.num_relations, len(all_rel_pairs))
 
             pred_boxes = pred_boxes[:num_boxes]
             pred_scores = pred_scores[:num_boxes]
             pred_classes = pred_classes[:num_boxes]
 
-            all_node_pairs = all_node_pairs[:num_relations]
-            all_relation_scores = all_relation_scores[:num_relations]
+            all_rel_pairs = all_rel_pairs[:num_relations]
+            all_rel_scores = all_rel_scores[:num_relations]
             all_rel_classes = all_rel_classes[:num_relations]
             # rln_features = rln_features[:num_relations]
 
             # 5. Build the adjacency matrix
             num_clip_nodes = 576
+            num_box_nodes = self.num_boxes
+            num_relation_nodes = self.num_relations
             num_text_nodes = self.num_boxes + self.num_relations
+            total_nodes = num_clip_nodes + num_box_nodes + num_relation_nodes
 
-            aggr_matrix = torch.zeros((num_text_nodes, num_clip_nodes), dtype=dtype, device=pred_boxes.device)
-            disp_matrix = torch.zeros((num_clip_nodes, num_text_nodes), dtype=dtype, device=pred_boxes.device)
+            adj_matrix = torch.zeros((total_nodes, total_nodes), dtype=dtype, device=pred_boxes.device)
 
             # Mapping for node types
-            rel_feature_start = self.num_boxes
+            clip_node_start = 0
+            box_node_start = num_clip_nodes
+            rel_node_start = num_clip_nodes + num_box_nodes
 
             # Add box-clip feature connections (based on coverage)
             concat_image_sizes = torch.concatenate((image_sizes[i], image_sizes[i]), dim=-1)
@@ -227,32 +231,31 @@ class PostProcessGraph(nn.Module):
             box_indices = torch.arange(len(pred_boxes), device=pred_boxes.device).repeat_interleave(mask.sum(dim=(1, 2)))
 
             # 计算 clip 和 box 对应的节点索引
-            clip_nodes = clip_indices
-            box_nodes = box_indices
+            clip_nodes = rel_node_start + clip_indices
+            box_nodes = box_node_start + box_indices
 
-            aggr_matrix[box_nodes, clip_nodes] = 1.
-            disp_matrix[clip_nodes, box_nodes] = 1.
+            adj_matrix[box_nodes, clip_nodes] = 1.
+            adj_matrix[clip_nodes, box_nodes] = 1.
 
             # 计算 src, dst, rel 的索引位置
-            src_nodes = all_node_pairs[:, 0]
-            dst_nodes = all_node_pairs[:, 1]
-            rel_nodes = rel_feature_start + torch.arange(num_relations)
+            src_nodes = all_rel_pairs[:, 0]
+            dst_nodes = all_rel_pairs[:, 1]
+            rel_nodes = rel_node_start + torch.arange(num_relations)
 
-            aggr_matrix[rel_nodes, :] = aggr_matrix[src_nodes, :]
-            disp_matrix[:, rel_nodes] = disp_matrix[:, dst_nodes]
+            adj_matrix[src_nodes, rel_nodes] = 1.
+            adj_matrix[rel_nodes, dst_nodes] = 1.
 
-            result['aggr_matrix'] = aggr_matrix
-            result['disp_matrix'] = disp_matrix
             result['nodes'] = {
                 'coordinates': pred_boxes,
                 'scores': pred_scores,
                 'classes': pred_classes
             }
             result['relations'] = {
-                'node_pairs': all_node_pairs,
-                'relation_scores': all_relation_scores,
+                'node_pairs': all_rel_pairs,
+                'relation_scores': all_rel_scores,
                 'relation_classes': all_rel_classes
             }
+            result['adj_matrix'] = adj_matrix
 
             result_list.append(result)
 
@@ -287,7 +290,18 @@ class SceneGraphVisionTower(nn.Module):
         self.vision_tower_name = vision_tower
         self.select_layer = args.mm_vision_select_layer
         self.select_feature = getattr(args, 'mm_vision_select_feature', 'patch')
-        self.sgma = PostProcessGraph()
+        # 调参
+        self.num_boxes = 32
+        self.num_relations = 32
+        self.box_threshold = 0.2
+        self.rel_threshold = 0.03
+        self.llm_hidden_size = 3072
+        self.sgma = PostProcessGraph(
+            num_boxes=self.num_boxes,
+            num_relations=self.num_relations,
+            box_threshold=self.box_threshold,
+            rel_threshold=self.rel_threshold
+        )
 
         if not delay_load:
             self.load_model()
@@ -367,17 +381,14 @@ class SceneGraphVisionTower(nn.Module):
         )
         result_list = self.postprocessors['bbox'](outputs, image_sizes)
         result_list = self.sgma(outputs=result_list, image_sizes=image_sizes, image_paths=image_paths)
-        aggr_matrix = torch.stack([result['aggr_matrix'] for result in result_list], dim=0)
-        disp_matrix = torch.stack([result['disp_matrix'] for result in result_list], dim=0)
-        node_embeddings = torch.zeros((batch_size, 640, 3072), device=self.device, dtype=self.dtype)
+        adj_matrix = torch.stack([result['adj_matrix'] for result in result_list], dim=0)
+        node_embeddings = torch.zeros((batch_size, 576 + self.num_boxes + self.num_relations, self.llm_hidden_size), device=self.device, dtype=self.dtype)
         node_embeddings[:, :576, :] = image_features
         for idx, result in enumerate(result_list):
             node_classes = result['nodes']['classes']
-            num_nodes = len(node_classes)
-            node_embeddings[idx, 576:576+num_nodes, :] = self.node_features[node_classes]
+            node_embeddings[idx, 576:576+self.num_boxes, :] = self.node_features[node_classes]
             rel_classes = result['relations']['relation_classes']
-            num_rels = len(rel_classes)
-            node_embeddings[idx, 608:608+num_rels, :] = self.edge_features[rel_classes]
+            node_embeddings[idx, 576+self.num_boxes:, :] = self.edge_features[rel_classes]
         # result['adj_matrix'] = adj_matrix
         # result['nodes'] = {
         #     'coordinates': pred_boxes,
@@ -401,7 +412,7 @@ class SceneGraphVisionTower(nn.Module):
         #     'relation_classes': all_rel_classes, torch.int64 (20, )
         # }
         # print_output(result_list)
-        return aggr_matrix, disp_matrix, node_embeddings
+        return adj_matrix, node_embeddings
         rel_scores = [result['graph']['rel_scores'] for result in result_list]
         # rel_scores = torch.stack(rel_scores, dim=0)
         bboxes = [result['graph']['pred_boxes'] for result in result_list]

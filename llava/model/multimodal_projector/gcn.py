@@ -6,9 +6,8 @@ import torch.nn.functional as F
 class GCN(nn.Module):
     def __init__(self, hidden_size):
         super(GCN, self).__init__()
-        self.aggr_fc = nn.Linear(hidden_size, hidden_size)
-        self.disp_fc = nn.Linear(hidden_size, hidden_size)
-        self.num_clip_tokens = 576
+        self.layers = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(4)])
+        self.dropout = nn.Dropout(0.05)
 
     def laplace(self, A):
         device = A.device
@@ -28,11 +27,12 @@ class GCN(nn.Module):
 
         return A_normalized
 
-    def forward(self, node_embeddings, aggr_matrix, disp_matrix):
-        aggr_matrix = self.laplace(aggr_matrix)
-        disp_matrix = self.laplace(disp_matrix)
-        aggr_nodes = self.aggr_fc(torch.bmm(aggr_matrix, node_embeddings[:, :self.num_clip_tokens])) + node_embeddings[:, self.num_clip_tokens:]
-        act_nodes = F.gelu(aggr_nodes)
-        disp_nodes = self.disp_fc(torch.bmm(disp_matrix, act_nodes)) + node_embeddings[:, :self.num_clip_tokens]
-        return disp_nodes
-
+    def forward(self, node_embeddings, adj_matrix):
+        adj_normalized = self.laplace(adj_matrix)
+        x = node_embeddings
+        for layer in self.layers:
+            # 图卷积计算
+            x_next = layer(torch.bmm(adj_normalized, x))
+            x_next = F.relu(x_next)
+        x_next = x_next + x
+        return self.dropout(x_next)
