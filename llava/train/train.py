@@ -828,7 +828,7 @@ def train(attn_implementation=None):
                 model_args.model_name_or_path,
                 cache_dir=training_args.cache_dir,
                 num_hidden_layers=4,
-                torch_dtype=(torch.bfloat16 if training_args.bf16 else None),
+                torch_dtype=compute_dtype,
                 **bnb_model_from_pretrained_args
             )
         else:
@@ -836,7 +836,7 @@ def train(attn_implementation=None):
                 model_args.model_name_or_path,
                 cache_dir=training_args.cache_dir,
                 attn_implementation=attn_implementation,
-                torch_dtype=(torch.bfloat16 if training_args.bf16 else None),
+                torch_dtype=compute_dtype,
                 **bnb_model_from_pretrained_args
             )
     else:
@@ -844,7 +844,7 @@ def train(attn_implementation=None):
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
             attn_implementation=attn_implementation,
-            torch_dtype=(torch.bfloat16 if training_args.bf16 else None),
+            torch_dtype=compute_dtype,
             **bnb_model_from_pretrained_args
         )
     model.config.use_cache = False

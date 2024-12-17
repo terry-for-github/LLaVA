@@ -12,7 +12,8 @@ deepspeed llava/train/train_mem.py \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
-    --bf16 True \
+    --bf16 False \
+    --fp16 True \
     --output_dir ./ckpts/llava-naohai-2b-pretrain-test \
     --max_steps 10 \
     --num_train_epochs 1 \
