@@ -25,7 +25,6 @@ checkpoints
 ckpts*
 
 .ipynb_checkpoints
-*.ipynb
 
 # DevContainer
 !.devcontainer/*
@@ -38,3 +37,4 @@ playground/
 logs/
 results/
 ckpts/
+.deepspeed_env
