@@ -59,6 +59,7 @@ class ModelArguments:
     vision_tower: Optional[str] = field(default=None)
     mm_vision_select_layer: Optional[int] = field(default=-1)   # default to the last layer
     pretrain_mm_mlp_adapter: Optional[str] = field(default=None)
+    continue_finetune: bool = field(default=False)
     mm_projector_type: Optional[str] = field(default='linear')
     mm_use_im_start_end: bool = field(default=False)
     mm_use_im_patch_token: bool = field(default=True)
@@ -68,8 +69,9 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    data_path: str = field(default=None,
+    data_path: Optional[str] = field(default=None,
                            metadata={"help": "Path to the training data."})
+    data_path_list: List[str] = field(default_factory=list, metadata={"help": "Path to the training data."})
     lazy_preprocess: bool = False
     is_multimodal: bool = False
     image_folder: Optional[str] = field(default=None)
@@ -827,16 +829,47 @@ def preprocess(
 class LazySupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, data_path: str,
+    def __init__(self, data_path: Optional[str],
                  tokenizer: transformers.PreTrainedTokenizer,
                  data_args: DataArguments):
         super(LazySupervisedDataset, self).__init__()
-        list_data_dict = json.load(open(data_path, "r"))
-
         rank0_print("Formatting inputs...Skip in lazy mode")
         self.tokenizer = tokenizer
-        self.list_data_dict = list_data_dict
         self.data_args = data_args
+        if data_path is not None:
+            list_data_dict = json.load(open(data_path, "r"))
+            self.list_data_dict = list_data_dict
+        else:
+            self.list_data_dict = []
+            for json_path in data_args.data_path_list:
+                print(f"Loading {json_path}")
+                if "blip_laion_cc_sbu_558k.json" in json_path:
+                    path_prefix = "./playground/pretrain/images/"
+                elif "DCI_8K" in json_path:
+                    path_prefix = "./playground/image_caption/DCI/"
+                elif "DF_1M" in json_path or "DF_100K" in json_path:
+                    path_prefix = "./playground/image_caption/DenseFusion/"
+                elif "DOCCI_15K" in json_path:
+                    path_prefix = "./playground/image_caption/DOCCI/"
+                elif "MMInstruct-18K" in json_path:
+                    path_prefix = "./playground/image_caption/MMInstruct/"
+                elif "ShareGPT4V_102K" in json_path:
+                    path_prefix = "./playground/image_caption/ShareGPT4V/"
+                elif "GBC-10M" in json_path:
+                    path_prefix = "./playground/image_caption/"
+                else:
+                    raise ValueError(f"Unknown dataset: {json_path}")
+
+                list_data_dict = json.load(open(json_path, "r"))
+                for data_dict in list_data_dict:
+                    data_dict['image'] = os.path.join(path_prefix, data_dict['image'])
+                    if 'image_caption' in json_path:
+                        human_message = data_dict['conversations'][0]
+                        gpt_message = data_dict['conversations'][1]
+                        gpt_message['from'] = 'gpt'
+                        data_dict['conversations'] = [human_message, gpt_message]
+                    self.list_data_dict.append(data_dict)
+        print('Num conversations:', len(self.list_data_dict))
 
     def __len__(self):
         return len(self.list_data_dict)
@@ -865,9 +898,13 @@ class LazySupervisedDataset(Dataset):
         assert len(sources) == 1, "Don't know why it is wrapped to a list"  # FIXME
         if 'image' in sources[0]:
             image_file = self.list_data_dict[i]['image']
-            image_folder = self.data_args.image_folder
             processor = self.data_args.image_processor
-            image = Image.open(os.path.join(image_folder, image_file)).convert('RGB')
+            if self.data_args.data_path is not None:
+                img_path = os.path.join(self.data_args.image_folder, image_file)
+            else:
+                img_path = image_file
+            with Image.open(img_path) as img:
+                image = img.convert('RGB')
             if self.data_args.image_aspect_ratio == 'pad':
                 def expand2square(pil_img, background_color):
                     width, height = pil_img.size
@@ -992,7 +1029,12 @@ def train(attn_implementation=None):
                 cache_dir=training_args.cache_dir,
                 **bnb_model_from_pretrained_args
             )
-        else:
+        elif (
+            'llama' in model_args.model_name_or_path.lower() or
+            'vicuna' in model_args.model_name_or_path.lower()
+        ):
+            if model_args.continue_finetune:
+                LlavaLlamaForCausalLM._keys_to_ignore_on_load_unexpected = ['vision_tower']
             model = LlavaLlamaForCausalLM.from_pretrained(
                 model_args.model_name_or_path,
                 cache_dir=training_args.cache_dir,
