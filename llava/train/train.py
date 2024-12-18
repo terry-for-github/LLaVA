@@ -349,7 +349,7 @@ def preprocess_llama_2(
             role = roles[sentence["from"]]
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
-        conversations.append(conv.get_prompt())
+        conversations.append(conv.get_prompt(tokenizer))
 
     # Tokenize conversations
 
@@ -596,7 +596,7 @@ def preprocess_v1(
             role = roles[sentence["from"]]
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
-        conversations.append(conv.get_prompt())
+        conversations.append(conv.get_prompt(tokenizer))
 
     # Tokenize conversations
 
@@ -682,7 +682,7 @@ def preprocess_mpt(
             role = roles[sentence["from"]]
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
-        conversations.append(conv.get_prompt())
+        conversations.append(conv.get_prompt(tokenizer))
 
     # Tokenize conversations
 
@@ -760,7 +760,7 @@ def preprocess_plain(
         assert len(source) == 2
         assert DEFAULT_IMAGE_TOKEN in source[0]['value']
         source[0]['value'] = DEFAULT_IMAGE_TOKEN
-        conversation = source[0]['value'] + source[1]['value'] + conversation_lib.default_conversation.sep
+        conversation = source[0]['value'] + '\n' + source[1]['value'] + conversation_lib.default_conversation.sep
         conversations.append(conversation)
     # tokenize conversations
     input_ids = [tokenizer_image_token(prompt, tokenizer, return_tensors='pt') for prompt in conversations]

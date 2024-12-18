@@ -34,7 +34,7 @@ class Conversation:
     stop_token_ids: list[int] = None
     skip_next: bool = False
 
-    def get_prompt(self):
+    def get_prompt(self, tokenizer=None):
         messages = self.messages
         if len(messages) > 0 and type(messages[0][1]) is tuple:
             messages = self.messages.copy()
@@ -79,7 +79,9 @@ class Conversation:
             return ret
         elif self.sep_style == SeparatorStyle.LLAMA_3:
             if self.tokenizer is None:
-                self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+                if tokenizer is None:
+                    self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+                self.tokenizer = tokenizer
                 # raise ValueError("Llama 3 tokenizer is not available. Make sure you have the necessary permissions.")
             chat_template_messages = [{"role": "system", "content": self.system}]
             for role, message in messages:
