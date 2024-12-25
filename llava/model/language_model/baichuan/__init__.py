@@ -1,1 +1,1 @@
-from .modeling_baichuan import BaichuanConfig, BaichuanModel, BaichuanForCausalLM, NormHead
+from .modeling_baichuan import BaichuanConfig, BaichuanModel, BaichuanForCausalLM

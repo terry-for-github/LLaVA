@@ -345,11 +345,11 @@ conv_llava_v1 = Conversation(
     sep2="</s>",
 )
 
-conv_llava_naohai = Conversation(
+conv_llava_baichuan = Conversation(
     system="A chat between a curious human and an artificial intelligence assistant. "
            "The assistant gives helpful, detailed, and polite answers to the human's questions.",
     roles=("<reserved_106>", "<reserved_107>"),
-    version="naohai",
+    version="baichuan",
     messages=(),
     offset=0,
     sep_style=SeparatorStyle.BAICHUAN,
@@ -412,7 +412,7 @@ conv_templates = {
     "llava_llama_2": conv_llava_llama_2,
 
     "mpt": conv_mpt,
-    "naohai": conv_llava_naohai,
+    "baichuan": conv_llava_baichuan,
 }
 
 

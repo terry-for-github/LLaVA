@@ -9,7 +9,7 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.generation.utils import GenerateOutput
 
 from ..llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
-from .baichuan import BaichuanConfig, BaichuanModel, BaichuanForCausalLM, NormHead
+from .baichuan import BaichuanConfig, BaichuanModel, BaichuanForCausalLM
 
 
 class LlavaBaichuanConfig(BaichuanConfig):
@@ -29,7 +29,7 @@ class LlavaBaichuanForCausalLM(BaichuanForCausalLM, LlavaMetaForCausalLM):
     def __init__(self, config):
         super(BaichuanForCausalLM, self).__init__(config)
         self.model = LlavaBaichuanModel(config)
-        self.lm_head = NormHead(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
 
