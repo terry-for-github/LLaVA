@@ -808,7 +808,7 @@ class LazySupervisedDataset(Dataset):
         self.data_args = data_args
         if data_path is not None:
             list_data_dict = json.load(open(data_path, "r"))
-            self.list_data_dict = list_data_dict[:512000]
+            self.list_data_dict = list_data_dict
         else:
             self.list_data_dict = []
             for json_path in data_args.data_path_list:
@@ -1005,16 +1005,11 @@ def train(attn_implementation=None):
                 **bnb_model_from_pretrained_args
             )
         elif 'naohai' in model_args.model_name_or_path:
-            if 'test' in training_args.output_dir or 'debug' in training_args.output_dir:
-                debug_dict = dict(num_hidden_layers=4)
-            else:
-                debug_dict = dict()
             model = LlavaBaichuanForCausalLM.from_pretrained(
                 model_args.model_name_or_path,
                 cache_dir=training_args.cache_dir,
                 torch_dtype=compute_dtype,
                 **bnb_model_from_pretrained_args,
-                **debug_dict
             )
         else:
             if 'test' in training_args.output_dir or 'debug' in training_args.output_dir:

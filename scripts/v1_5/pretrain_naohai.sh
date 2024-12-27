@@ -11,11 +11,10 @@ echo WANDB_PROJECT=naohai >> .deepspeed_env
     # playground/image_caption/MMInstruct/ANNO/MMInstruct-18K_exist.json \
     # playground/image_caption/ShareGPT4V/ANNO/ShareGPT4V_102K_exist.json \
 
-RUN_NAME=pretrain_naohai_7b_sgemf_GBC4_1220_test
-NUM_TRIAL=4
+RUN_NAME=pretrain_naohai_7b
+NUM_TRIAL=6
 
-deepspeed \
-    --enable_each_rank_log ./logs \
+deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
     llava/train/train_mem.py \
     --deepspeed ./scripts/zero0.json \
     --model_name_or_path ./naohai_7b \
@@ -29,18 +28,17 @@ deepspeed \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./ckpts/llava-naohai-7b-pretrain_sgemf_GBC4_1220_test \
+    --output_dir ./ckpts/llava-naohai-7b-pretrain \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
-    --gradient_accumulation_steps 2 \
+    --gradient_accumulation_steps 4 \
     --save_strategy "steps" \
-    --save_steps 10 \
-    --save_total_limit 5 \
+    --save_steps 1000 \
+    --save_total_limit 1 \
     --learning_rate 1e-3 \
     --weight_decay 0. \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
-    --max_grad_norm 0.5 \
     --logging_steps 1 \
     --tf32 True \
     --model_max_length 2048 \

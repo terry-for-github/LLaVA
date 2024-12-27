@@ -6,10 +6,11 @@ echo TRANSFORMERS_OFFLINE=1 >> .deepspeed_env
 echo WANDB_PROJECT=naohai >> .deepspeed_env
 
 RUN_NAME=finetune_naohai_7b
-NUM_TRIAL=6
+NUM_TRIAL=8
 
-deepspeed llava/train/train_mem.py \
-    --deepspeed ./scripts/zero2.json \
+deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
+    llava/train/train_mem.py \
+    --deepspeed ./scripts/zero2_offload.json  \
     --model_name_or_path ./naohai_7b \
     --version baichuan \
     --data_path ./playground/finetune/llava_v1_5_mix665k.json \
@@ -27,7 +28,6 @@ deepspeed llava/train/train_mem.py \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 2 \
-    --max_grad_norm 0.5 \
     --save_strategy "steps" \
     --save_steps 20000 \
     --save_total_limit 1 \
@@ -37,7 +37,7 @@ deepspeed llava/train/train_mem.py \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
-    --model_max_length 1400 \
+    --model_max_length 2048 \
     --gradient_checkpointing True \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
