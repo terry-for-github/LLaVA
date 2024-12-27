@@ -30,8 +30,7 @@ def config_logger():
     os.makedirs(log_dir, exist_ok=True)
 
     _add_file_logger('transformers', log_dir)
-    if rank in ['0', '-1', '8', '16', '24']:
-        _add_file_logger('DeepSpeed', log_dir)
+    _add_file_logger('DeepSpeed', log_dir)
 
     if rank in ['0', '-1']:
         import shutil
