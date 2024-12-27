@@ -5,6 +5,7 @@ echo https_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 echo http_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 echo TRANSFORMERS_OFFLINE=1 >> .deepspeed_env
 echo WANDB_PROJECT=qwen_ex >> .deepspeed_env
+echo NCCL_TIMEOUT=1200000 >> .deepspeed_env
 
 RUN_NAME=pretrain_qwen25_7b_sgemf_1216_short
 NUM_TRIAL=6
