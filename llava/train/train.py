@@ -825,6 +825,59 @@ def preprocess(
 
     return dict(input_ids=input_ids, labels=targets)
 
+def get_onevision_datalist(data_path: str):
+    dataset_list = os.listdir(data_path)
+    json_list = []
+    for dataset in dataset_list:
+        if dataset in ['cambrian(filtered)', 'ureader_kg', 'ureader_qa', 'llava_next_raw_format']:
+            json_list.append(os.path.join(data_path, dataset, dataset+'_processed.json'))
+        else:
+            json_list.append(os.path.join(data_path, dataset, dataset+'_anno.json'))
+    list_data_dict = []
+    for i in range(len(dataset_list)):
+        if dataset_list[i] == 'VisualWebInstruct(filtered)':
+            rank0_print('Skipping', json_list[i], '...')
+            continue
+        rank0_print('Loading', json_list[i], '...')
+        data_list = json.load(open(json_list[i], 'r'))
+        if dataset_list[i] == 'hme100k':
+            # these images are not available
+            for bad_index in [49533, 49499, 49496, 49493, 49492, 49477, 49464, 49445, 49434, 49420, 49394, 49391, 49366, 49346]:
+                del data_list[bad_index]
+        if dataset_list[i] in ['cambrian(filtered)', 'ureader_kg', 'ureader_qa', 'llava_next_raw_format']:
+            for data_dict in data_list:
+                data_dict['image'] = data_path + '/' + dataset_list[i] + '/' + data_dict['image']
+        else:
+            for data_dict in data_list:
+                if 'image' in data_dict:
+                    data_dict['image'] = data_path + '/'  + data_dict['image']
+        if dataset_list[i] == 'lrv_normal(filtered)':
+            del data_list[7527] # only gpt
+            del data_list[4675] # has message['from'] == 'Answer'
+            del data_list[1475] # has message['from'] == 'Answer'
+        factor = 1
+        if dataset_list[i] in ['sroie', 'hme100k', 'tallyqa(cauldron,llava_format)']:
+            factor = 0.1
+        elif dataset_list[i] in ['k12_printing', 'clevr(cauldron,llava_format)', 'dvqa(cauldron,llava_format)', 'figureqa(cauldron,llava_format)']:
+            factor = 0.01
+        elif dataset_list[i] in ['scienceqa(nona_context)', 'FigureQA(MathV360K)', 'IconQA(MathV360K)', 'PMC-VQA(MathV360K)', 'raven(cauldron)', 'iconqa(cauldron,llava_format)', 'tqa(cauldron,llava_format)']:
+            factor = 0.05
+        elif dataset_list[i] in ['magpie_pro(l3_80b_mt)', 'magpie_pro(l3_80b_st)', 'magpie_pro(qwen2_72b_st)']:
+            factor = 0.5
+        data_list =  data_list[:int(len(data_list) * factor)]
+        if dataset_list[i] in ['websight(cauldron)', 'multihiertt(cauldron)', 'geomverse(cauldron)', 'dvqa(cauldron,llava_format)',
+                        'visual7w(cauldron,llava_format)', 'iconqa(cauldron,llava_format)', 'aokvqa(cauldron,llava_format)', 'hitab(cauldron,llava_format)', 'screen2words(cauldron)',
+                        'figureqa(cauldron,llava_format)', 'vistext(cauldron)', 'ai2d(cauldron,llava_format)', 'robut_wikisql(cauldron)', 'tabmwp(cauldron)', 'robut_wtq(cauldron,llava_format)',
+                        'iam(cauldron)', 'vqarad(cauldron,llava_format)', 'intergps(cauldron,llava_format)', 'hateful_memes(cauldron,llava_format)', 'diagram_image_to_text(cauldron)',
+                        'chart2text(cauldron)', 'clevr(cauldron,llava_format)', 'raven(cauldron)', 'visualmrc(cauldron)', 'vsr(cauldron,llava_format)', 'infographic_vqa_llava_format',
+                        'rendered_text(cauldron)', 'scienceqa(cauldron,llava_format)', 'mapqa(cauldron,llava_format)', 'tqa(cauldron,llava_format)', 'st_vqa(cauldron,llava_format)',
+                        'robut_sqa(cauldron)', 'tallyqa(cauldron,llava_format)', 'chartqa(cauldron,llava_format)', 'lrv_normal(filtered)']:
+            for data_dict in data_list:
+                first_message = data_dict['conversations'][0]
+                if DEFAULT_IMAGE_TOKEN not in first_message['value']:
+                    first_message['value'] = DEFAULT_IMAGE_TOKEN + '\n' + first_message['value']
+        list_data_dict.extend(data_list)
+    return list_data_dict
 
 class LazySupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
@@ -843,7 +896,10 @@ class LazySupervisedDataset(Dataset):
             self.list_data_dict = []
             for json_path in data_args.data_path_list:
                 print(f"Loading {json_path}")
-                if "blip_laion_cc_sbu_558k.json" in json_path:
+                if 'onevision' in json_path:
+                    self.list_data_dict.extend(get_onevision_datalist(json_path))
+                    continue
+                elif "blip_laion_cc_sbu_558k" in json_path:
                     path_prefix = "./playground/pretrain/images/"
                 elif "DCI_8K" in json_path:
                     path_prefix = "./playground/image_caption/DCI/"
@@ -857,6 +913,8 @@ class LazySupervisedDataset(Dataset):
                     path_prefix = "./playground/image_caption/ShareGPT4V/"
                 elif "GBC-10M" in json_path:
                     path_prefix = "./playground/image_caption/"
+                elif "MMInstruct-GPT4V" in json_path:
+                    path_prefix = "./playground/MMInstruct-GPT4V/images/"
                 else:
                     raise ValueError(f"Unknown dataset: {json_path}")
 
