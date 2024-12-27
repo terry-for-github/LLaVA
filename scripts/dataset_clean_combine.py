@@ -7,7 +7,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='解析第一个参数作为JSON文件')
 parser.add_argument('json_file', type=str, help='输入的JSON文件')
-parser.add_argument('tot', type=int, help='输入的JSON文件')
+parser.add_argument('tot', type=int, help='总线程数')
 arg = parser.parse_args()
 json_path = arg.json_file
 tot = arg.tot

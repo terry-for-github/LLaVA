@@ -9,14 +9,15 @@ from transformers import AutoImageProcessor
 
 parser = argparse.ArgumentParser(description='解析第一个参数作为JSON文件')
 parser.add_argument('json_file', type=str, help='输入的JSON文件')
-parser.add_argument('idx', type=int, help='输入的JSON文件')
-parser.add_argument('tot', type=int, help='输入的JSON文件')
+parser.add_argument('idx', type=int, help='第i个线程')
+parser.add_argument('tot', type=int, help='总线程数')
 arg = parser.parse_args()
 json_path = arg.json_file
 idx = arg.idx
 tot = arg.tot
 
-
+# 用来过滤一些，用英文提问，但是中文回答的样本
+# 这里的逻辑是，如果大部分字符都是英文的（>70%），那就认为是英文的
 def is_english_or_numeric_or_punctuation(text):
     # 匹配只包含英文字符、数字、标点符号的字符串
     valid_characters = string.ascii_letters + string.digits + string.punctuation + ' ' + '\n'
@@ -24,14 +25,7 @@ def is_english_or_numeric_or_punctuation(text):
 
 if idx == 0:
     print('Start loading data...')
-data_path_list = [
-    # "playground/image_caption/DCI/ANNO/DCI_8K.json" ,
-    "playground/image_caption/DenseFusion/ANNO/DF_100K.json",
-    # "playground/image_caption/DOCCI/ANNO/DOCCI_15K.json" ,
-    "playground/image_caption/GBC-10M/train_0_clean.json",
-    # "playground/image_caption/MMInstruct/ANNO/MMInstruct-18K.json" ,
-    # "playground/image_caption/ShareGPT4V/ANNO/ShareGPT4V_102K.json",
-]
+
 tot_list_data_dict = []
 if idx == 0:
     print(f"Loading {json_path}")
