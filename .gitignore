@@ -38,3 +38,4 @@ logs/
 results/
 ckpts/
 .deepspeed_env
+naohai_*

@@ -9,7 +9,7 @@ RUN_NAME=finetune_qwen25_7b_sgemf_ovmmi_onlyqa_1214_short_1220
 NUM_TRIAL=2
     # --data_path ./playground/finetune/llava_v1_5_mix665k.json \
 
-deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
+deepspeed -H /hostfile --num_nodes 2 \
     llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json \
     --model_name_or_path Qwen/Qwen2.5-7B-Instruct \
@@ -32,7 +32,7 @@ deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
     --gradient_accumulation_steps 4 \
     --save_strategy "steps" \
     --save_steps 4000 \
-    --save_total_limit 10 \
+    --save_total_limit 1 \
     --learning_rate 2e-5 \
     --weight_decay 0. \
     --warmup_ratio 0.03 \
