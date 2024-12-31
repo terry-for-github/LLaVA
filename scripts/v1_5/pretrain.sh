@@ -16,7 +16,6 @@ deepspeed llava/train/train_mem.py \
     --output_dir ./ckpts/llava-qwen25-3b-pretrain \
     --num_train_epochs 1 \
     --per_device_train_batch_size 16 \
-    --per_device_eval_batch_size 4 \
     --gradient_accumulation_steps 2 \
     --save_strategy "steps" \
     --save_steps 24000 \
@@ -32,4 +31,5 @@ deepspeed llava/train/train_mem.py \
     --gradient_checkpointing True \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
-    --report_to none
+    --report_to none \
+    --max_steps 10
