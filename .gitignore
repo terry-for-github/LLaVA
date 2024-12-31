@@ -38,3 +38,5 @@ playground/
 logs/
 results/
 ckpts/
+.deepspeed_env
+run.sh
