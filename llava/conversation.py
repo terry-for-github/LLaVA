@@ -11,7 +11,7 @@ class SeparatorStyle(Enum):
     """Different separator style."""
     SINGLE = auto()
     TWO = auto()
-    CHATML = auto()
+    QWEN = auto()
     MPT = auto()
     PLAIN = auto()
     LLAMA_2 = auto()
@@ -35,7 +35,7 @@ class Conversation:
     stop_token_ids: list[int] = None
     skip_next: bool = False
 
-    def get_prompt(self):
+    def get_prompt(self, tokenizer=None):
         messages = self.messages
         if len(messages) > 0 and type(messages[0][1]) is tuple:
             messages = self.messages.copy()
@@ -67,9 +67,22 @@ class Conversation:
                     ret += role + ": " + message + seps[i % 2]
                 else:
                     ret += role + ":"
+        elif self.sep_style == SeparatorStyle.QWEN:
+            ret = "" if self.system == "" else self.system + self.sep + "\n"
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, images, _ = message
+                        message = "<image>" * len(images) + message
+                    ret += role + "\n" + message + self.sep + "\n"
+                else:
+                    ret += role + "\n"
+            return ret
         elif self.sep_style == SeparatorStyle.LLAMA_3:
             if self.tokenizer is None:
-                self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+                if tokenizer is None:
+                    self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+                self.tokenizer = tokenizer
                 # raise ValueError("Llama 3 tokenizer is not available. Make sure you have the necessary permissions.")
             chat_template_messages = [{"role": "system", "content": self.system}]
             for role, message in messages:
@@ -407,6 +420,16 @@ conv_llava_baichuan = Conversation(
     sep_style=SeparatorStyle.BAICHUAN,
     sep=" ",
     sep2="</s>",
+)
+
+conv_qwen = Conversation(
+    system="<|im_start|>system\nYou are a helpful assistant.",
+    roles=("<|im_start|>user", "<|im_start|>assistant"),
+    version="qwen",
+    messages=[],
+    offset=0,
+    sep_style=SeparatorStyle.QWEN,
+    sep="<|im_end|>",
 )
 
 conv_llava_v1_mmtag = Conversation(

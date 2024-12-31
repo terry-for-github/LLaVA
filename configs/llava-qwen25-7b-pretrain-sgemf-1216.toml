@@ -1,0 +1,55 @@
+# deepspeed
+deepspeed = "scripts/zero0.json"
+
+# model
+model_name_or_path = "Qwen/Qwen2.5-7B-Instruct"
+vision_tower = "openai/clip-vit-large-patch14-336"
+mm_projector_type = "mlp2x_gelu"
+mm_vision_select_layer = -2
+model_max_length = 2048
+tune_mm_mlp_adapter = true
+
+# data process
+version = "plain"
+data_path_list = [
+    "playground/pretrain/blip_laion_cc_sbu_558k.json",
+    "playground/image_caption/DCI/ANNO/DCI_8K_exist.json",
+    "playground/image_caption/DenseFusion/ANNO/DF_1M_exist.json",
+    "playground/image_caption/DOCCI/ANNO/DOCCI_15K_exist.json",
+    "playground/image_caption/GBC-10M/train_0_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_1_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_2_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_3_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_4_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_5_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_6_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_7_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_8_clean_exist.json",
+    "playground/image_caption/GBC-10M/train_9_clean_exist.json",
+    "playground/image_caption/MMInstruct/ANNO/MMInstruct-18K_exist.json",
+    "playground/image_caption/ShareGPT4V/ANNO/ShareGPT4V_102K_exist.json",
+]
+mm_use_im_start_end = false
+mm_use_im_patch_token = false
+lazy_preprocess = true
+
+# training
+bf16 = true
+tf32 = true
+num_train_epochs = 1
+per_device_train_batch_size = 4
+gradient_accumulation_steps = 2
+learning_rate = 1e-3
+weight_decay = 0.0
+warmup_ratio = 0.03
+lr_scheduler_type = "cosine"
+max_grad_norm = 0.5
+gradient_checkpointing = true
+dataloader_num_workers = 4
+
+# output
+output_dir = "ckpts/llava-qwen25-7b-pretrain-sgemf-1216"
+save_strategy = "steps"
+save_steps = 10000
+save_total_limit = 1
+logging_steps = 1

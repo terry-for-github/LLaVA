@@ -75,6 +75,7 @@ class DataArguments:
     lazy_preprocess: bool = False
     is_multimodal: bool = False
     image_folder: Optional[str] = field(default=None)
+    one_vision: Optional[str] = field(default=None)
     image_aspect_ratio: str = 'square'
 
 
@@ -351,7 +352,7 @@ def preprocess_llama_2(
             role = roles[sentence["from"]]
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
-        conversations.append(conv.get_prompt())
+        conversations.append(conv.get_prompt(tokenizer))
 
     # Tokenize conversations
 
@@ -504,6 +505,80 @@ def preprocess_llama3(
         labels=targets,  # tensor(bs x seq_len)
     )
 
+def preprocess_qwen(sources, tokenizer: transformers.PreTrainedTokenizer, has_image: bool = False, max_len=2048, system_message: str = "You are a helpful assistant.") -> Dict:
+    # roles = {"human": "<|im_start|>user", "gpt": "<|im_start|>assistant"}
+    roles = {"human": "user", "gpt": "assistant"}
+
+    # Add image tokens to tokenizer as a special tokens
+    # Use a deepcopy of tokenizer so that we don't modify on the tokenizer
+    tokenizer = copy.deepcopy(tokenizer)
+    # When there is actually an image, we add the image tokens as a special token
+    if has_image:
+        tokenizer.add_tokens(["<image>"], special_tokens=True)
+
+    image_token_index = tokenizer.convert_tokens_to_ids("<image>")
+    im_start, im_end = tokenizer.additional_special_tokens_ids[:2]
+    # unmask_tokens = ["<|im_start|>", "<|im_start|>", "\n"]
+    # nl_tokens = tokenizer("\n").input_ids -> 198
+    unmask_tokens_idx = [im_start, im_end]
+
+    # Reset Qwen chat templates so that it won't include system message every time we apply
+    chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+    tokenizer.chat_template = chat_template
+
+    # _system = tokenizer("system").input_ids + nl_tokens
+    # _user = tokenizer("user").input_ids + nl_tokens
+    # _assistant = tokenizer("assistant").input_ids + nl_tokens
+
+    # Apply prompt templates
+    input_ids, targets = [], []
+    for i, source in enumerate(sources):
+        if roles[source[0]["from"]] != roles["human"]:
+            source = source[1:]
+
+        input_id, target = [], []
+
+        # New version, use apply chat template
+        # Build system message for each sentence
+        input_id += tokenizer.apply_chat_template([{"role": "system", "content": system_message}])
+        target += [IGNORE_INDEX] * len(input_id)
+
+        for conv in source:
+            # Make sure llava data can load
+            try:
+                role = conv["role"]
+                content = conv["content"]
+            except:
+                role = conv["from"]
+                content = conv["value"]
+
+            role = roles.get(role, role)
+            if role not in ["user", "system"]:
+                content = content
+            conv = [{"role": role, "content": content}]
+            encode_id = tokenizer.apply_chat_template(conv)
+            input_id += encode_id
+            if role in ["user", "system"]:
+                target += [IGNORE_INDEX] * len(encode_id)
+            else:
+                target += encode_id
+
+        assert len(input_id) == len(target), f"{len(input_id)} != {len(target)}"
+        for idx, encode_id in enumerate(input_id):
+            # if encode_id in unmask_tokens_idx:
+            #     target[idx] = encode_id
+            if encode_id == image_token_index:
+                input_id[idx] = IMAGE_TOKEN_INDEX
+        input_ids.append(input_id)
+        targets.append(target)
+    input_ids = torch.tensor(input_ids, dtype=torch.long)
+    targets = torch.tensor(targets, dtype=torch.long)
+
+    return dict(
+        input_ids=input_ids,  # tensor(bs x seq_len)
+        labels=targets,  # tensor(bs x seq_len)
+    )
+
 def preprocess_v1(
     sources,
     tokenizer: transformers.PreTrainedTokenizer,
@@ -524,7 +599,7 @@ def preprocess_v1(
             role = roles[sentence["from"]]
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
-        conversations.append(conv.get_prompt())
+        conversations.append(conv.get_prompt(tokenizer))
 
     # Tokenize conversations
 
@@ -673,6 +748,89 @@ def preprocess_baichuan(
     )
 
 
+def preprocess_baichuan(
+    sources,
+    tokenizer: transformers.PreTrainedTokenizer,
+    has_image: bool = False
+) -> Dict:
+    conv = conversation_lib.default_conversation.copy()
+    roles = {"human": conv.roles[0], "gpt": conv.roles[1]}
+
+    # Apply prompt templates
+    conversations = []
+    for i, source in enumerate(sources):
+        if roles[source[0]["from"]] != conv.roles[0]:
+            # Skip the first one if it is not from human
+            source = source[1:]
+
+        conv.messages = []
+        for j, sentence in enumerate(source):
+            role = roles[sentence["from"]]
+            assert role == conv.roles[j % 2], f"{i}"
+            conv.append_message(role, sentence["value"])
+        conversations.append(conv.get_prompt(tokenizer))
+    # Tokenize conversations
+
+    if has_image:
+        input_ids = torch.stack([tokenizer_image_token(prompt, tokenizer, return_tensors='pt') for prompt in conversations], dim=0)
+    else:
+        input_ids = tokenizer(
+            conversations,
+            return_tensors="pt",
+            padding="longest",
+            max_length=tokenizer.model_max_length,
+            truncation=True,
+        ).input_ids
+
+    targets = input_ids.clone()
+
+    assert conv.sep_style == conversation_lib.SeparatorStyle.BAICHUAN
+
+    # Mask targets
+    sep = conv.sep + conv.roles[1] + " "
+    for conversation, target in zip(conversations, targets):
+        total_len = int(target.ne(tokenizer.pad_token_id).sum())
+
+        rounds = conversation.split(conv.sep2)
+        # print(len(conversations), rounds)
+        cur_len = 1
+        target[:cur_len] = IGNORE_INDEX
+        for i, rou in enumerate(rounds):
+            if rou == "":
+                break
+
+            parts = rou.split(sep)
+            if len(parts) != 2:
+                break
+            parts[0] += sep
+
+            if has_image:
+                round_len = len(tokenizer_image_token(rou, tokenizer))
+                instruction_len = len(tokenizer_image_token(parts[0], tokenizer)) - 2
+            else:
+                round_len = len(tokenizer(rou).input_ids)
+                instruction_len = len(tokenizer(parts[0]).input_ids) - 2
+            # if i != 0 and not tokenizer.legacy and IS_TOKENIZER_GREATER_THAN_0_14:
+            # print('target:', cur_len, instruction_len, round_len, tokenizer.decode(target[cur_len:cur_len+instruction_len], skip_special_tokens=False), flush=True)
+            target[cur_len:cur_len+instruction_len] = IGNORE_INDEX
+
+            cur_len += round_len
+        target[cur_len:] = IGNORE_INDEX
+
+        if cur_len < tokenizer.model_max_length:
+            if cur_len != total_len:
+                target[:] = IGNORE_INDEX
+                print(
+                    f"WARNING: tokenization mismatch: {cur_len} vs. {total_len}."
+                    f" (ignored)"
+                )
+
+    return dict(
+        input_ids=input_ids,
+        labels=targets,
+    )
+
+
 def preprocess_mpt(
     sources,
     tokenizer: transformers.PreTrainedTokenizer,
@@ -693,7 +851,7 @@ def preprocess_mpt(
             role = roles[sentence["from"]]
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
-        conversations.append(conv.get_prompt())
+        conversations.append(conv.get_prompt(tokenizer))
 
     # Tokenize conversations
 
@@ -771,7 +929,7 @@ def preprocess_plain(
         assert len(source) == 2
         assert DEFAULT_IMAGE_TOKEN in source[0]['value']
         source[0]['value'] = DEFAULT_IMAGE_TOKEN
-        conversation = source[0]['value'] + source[1]['value'] + conversation_lib.default_conversation.sep
+        conversation = source[0]['value'] + '\n' + source[1]['value'] + conversation_lib.default_conversation.sep
         conversations.append(conversation)
     # tokenize conversations
     input_ids = [tokenizer_image_token(prompt, tokenizer, return_tensors='pt') for prompt in conversations]
@@ -885,6 +1043,8 @@ def preprocess(
         return preprocess_baichuan(sources, tokenizer, has_image=has_image)
     if conversation_lib.default_conversation.version.startswith("v1"):
         return preprocess_v1(sources, tokenizer, has_image=has_image)
+    if conversation_lib.default_conversation.version == "qwen":
+        return preprocess_qwen(sources, tokenizer, has_image=has_image)
     if conversation_lib.default_conversation.version == "mpt":
         return preprocess_mpt(sources, tokenizer, has_image=has_image)
     if conversation_lib.default_conversation.version == "llama3":
@@ -1095,6 +1255,67 @@ class LazySupervisedDataset(Dataset):
         return data_dict
 
 
+class OneVisionDataset(LazySupervisedDataset):
+    """Dataset for supervised fine-tuning."""
+
+    def __init__(self, data_path: str,
+                 tokenizer: transformers.PreTrainedTokenizer,
+                 data_args: DataArguments):
+        super(LazySupervisedDataset, self).__init__()
+        dataset_list = os.listdir(data_path)
+        json_list = []
+        for dataset in dataset_list:
+            if dataset in ['cambrian(filtered)', 'ureader_kg', 'ureader_qa', 'llava_next_raw_format']:
+                json_list.append(os.path.join(data_path, dataset, dataset+'_processed.json'))
+            else:
+                json_list.append(os.path.join(data_path, dataset, dataset+'_anno.json'))
+        list_data_dict = []
+        for i in range(len(dataset_list)):
+            if dataset_list[i] == 'VisualWebInstruct(filtered)':
+                rank0_print('Skipping', json_list[i], '...')
+                continue
+            rank0_print('Loading', json_list[i], '...')
+            data_list = json.load(open(json_list[i], 'r'))
+            if dataset_list[i] == 'hme100k':
+                # these images are not available
+                for bad_index in [49533, 49499, 49496, 49493, 49492, 49477, 49464, 49445, 49434, 49420, 49394, 49391, 49366, 49346]:
+                    del data_list[bad_index]
+            if dataset_list[i] in ['cambrian(filtered)', 'ureader_kg', 'ureader_qa', 'llava_next_raw_format']:
+                for data_dict in data_list:
+                    data_dict['image'] = dataset_list[i] + '/' + data_dict['image']
+            if dataset_list[i] == 'lrv_normal(filtered)':
+                del data_list[7527] # only gpt
+                del data_list[4675] # has message['from'] == 'Answer'
+                del data_list[1475] # has message['from'] == 'Answer'
+            factor = 1
+            if dataset_list[i] in ['sroie', 'hme100k', 'tallyqa(cauldron,llava_format)']:
+                factor = 0.1
+            elif dataset_list[i] in ['k12_printing', 'clevr(cauldron,llava_format)', 'dvqa(cauldron,llava_format)', 'figureqa(cauldron,llava_format)']:
+                factor = 0.01
+            elif dataset_list[i] in ['scienceqa(nona_context)', 'FigureQA(MathV360K)', 'IconQA(MathV360K)', 'PMC-VQA(MathV360K)', 'raven(cauldron)', 'iconqa(cauldron,llava_format)', 'tqa(cauldron,llava_format)']:
+                factor = 0.05
+            elif dataset_list[i] in ['magpie_pro(l3_80b_mt)', 'magpie_pro(l3_80b_st)', 'magpie_pro(qwen2_72b_st)']:
+                factor = 0.5
+            data_list =  data_list[:int(len(data_list) * factor)]
+            if dataset_list[i] in ['websight(cauldron)', 'multihiertt(cauldron)', 'geomverse(cauldron)', 'dvqa(cauldron,llava_format)',
+                            'visual7w(cauldron,llava_format)', 'iconqa(cauldron,llava_format)', 'aokvqa(cauldron,llava_format)', 'hitab(cauldron,llava_format)', 'screen2words(cauldron)',
+                            'figureqa(cauldron,llava_format)', 'vistext(cauldron)', 'ai2d(cauldron,llava_format)', 'robut_wikisql(cauldron)', 'tabmwp(cauldron)', 'robut_wtq(cauldron,llava_format)',
+                            'iam(cauldron)', 'vqarad(cauldron,llava_format)', 'intergps(cauldron,llava_format)', 'hateful_memes(cauldron,llava_format)', 'diagram_image_to_text(cauldron)',
+                            'chart2text(cauldron)', 'clevr(cauldron,llava_format)', 'raven(cauldron)', 'visualmrc(cauldron)', 'vsr(cauldron,llava_format)', 'infographic_vqa_llava_format',
+                            'rendered_text(cauldron)', 'scienceqa(cauldron,llava_format)', 'mapqa(cauldron,llava_format)', 'tqa(cauldron,llava_format)', 'st_vqa(cauldron,llava_format)',
+                            'robut_sqa(cauldron)', 'tallyqa(cauldron,llava_format)', 'chartqa(cauldron,llava_format)', 'lrv_normal(filtered)']:
+                for data_dict in data_list:
+                    first_message = data_dict['conversations'][0]
+                    if DEFAULT_IMAGE_TOKEN not in first_message['value']:
+                        first_message['value'] = DEFAULT_IMAGE_TOKEN + '\n' + first_message['value']
+            list_data_dict.extend(data_list)
+
+        rank0_print("Formatting inputs...Skip in lazy mode", len(list_data_dict))
+        self.tokenizer = tokenizer
+        self.list_data_dict = list_data_dict
+        self.data_args = data_args
+
+
 @dataclass
 class DataCollatorForSupervisedDataset(object):
     """Collate examples for supervised fine-tuning."""
@@ -1132,9 +1353,14 @@ class DataCollatorForSupervisedDataset(object):
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                 data_args) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
-    train_dataset = LazySupervisedDataset(tokenizer=tokenizer,
-                                data_path=data_args.data_path,
-                                data_args=data_args)
+    if data_args.one_vision is None:
+        train_dataset = LazySupervisedDataset(tokenizer=tokenizer,
+                                    data_path=data_args.data_path,
+                                    data_args=data_args)
+    else:
+        train_dataset = OneVisionDataset(tokenizer=tokenizer,
+                                    data_path=data_args.one_vision,
+                                    data_args=data_args)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset,
                 eval_dataset=None,
@@ -1356,11 +1582,7 @@ def train(attn_implementation=None):
                     processing_class=tokenizer,
                     args=training_args,
                     **data_module)
-
-    if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
-        trainer.train(resume_from_checkpoint=True)
-    else:
-        trainer.train()
+    trainer.train()
     trainer.save_state()
 
     model.config.use_cache = True

@@ -8,12 +8,12 @@ accelerate launch \
     --main_process_ip $VC_TASK0_HOSTS \
     llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json \
-    --model_name_or_path meta-llama/Llama-3.2-3B-Instruct \
-    --version llama3 \
-    --data_path ./playground/finetune/llava_v1_5_mix665k.json \
-    --image_folder ./playground/finetune \
+    --model_name_or_path lmsys/vicuna-7b-v1.5 \
+    --version v1 \
+    --image_folder ./playground/onevision \
+    --one_vision ./playground/onevision \
     --vision_tower openai/clip-vit-large-patch14-336 \
-    --pretrain_mm_mlp_adapter ./ckpts/llava-llama32-3b-pretrain/mm_projector.bin \
+    --pretrain_mm_mlp_adapter ./ckpts/llava-v1.5-7b-pretrain/mm_projector.bin \
     --mm_projector_type mlp2x_gelu \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
@@ -21,12 +21,13 @@ accelerate launch \
     --image_aspect_ratio pad \
     --group_by_modality_length False \
     --bf16 True \
-    --output_dir ./ckpts/llava-llama32-3b \
+    --output_dir ./ckpts/llava-v1.5-7b-ov \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
+    --per_device_eval_batch_size 4 \
     --gradient_accumulation_steps 2 \
     --save_strategy "steps" \
-    --save_steps 50000 \
+    --save_steps 5000 \
     --save_total_limit 1 \
     --learning_rate 2e-5 \
     --weight_decay 0. \
