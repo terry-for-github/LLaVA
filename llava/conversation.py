@@ -10,6 +10,7 @@ class SeparatorStyle(Enum):
     """Different separator style."""
     SINGLE = auto()
     TWO = auto()
+    CHATML = auto()
     MPT = auto()
     PLAIN = auto()
     LLAMA_2 = auto()
@@ -61,6 +62,17 @@ class Conversation:
                     ret += role + ": " + message + seps[i % 2]
                 else:
                     ret += role + ":"
+        elif self.sep_style == SeparatorStyle.CHATML:
+            ret = "" if self.system == "" else self.system + self.sep + "\n"
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, images, _ = message
+                        message = "<image>" * len(images) + message
+                    ret += role + "\n" + message + self.sep + "\n"
+                else:
+                    ret += role + "\n"
+            return ret
         elif self.sep_style == SeparatorStyle.MPT:
             ret = self.system + self.sep
             for role, message in messages:
@@ -369,6 +381,16 @@ Answer the questions.""",
     sep="<|im_end|>",
 )
 
+conv_qwen = Conversation(
+    system="<|im_start|>system\nYou are a helpful assistant.",
+    roles=("<|im_start|>user", "<|im_start|>assistant"),
+    version="qwen",
+    messages=[],
+    offset=0,
+    sep_style=SeparatorStyle.CHATML,
+    sep="<|im_end|>",
+)
+
 default_conversation = conv_vicuna_v1
 conv_templates = {
     "default": conv_vicuna_v0,
@@ -389,6 +411,7 @@ conv_templates = {
     "llava_llama_2": conv_llava_llama_2,
 
     "mpt": conv_mpt,
+    "qwen": conv_qwen,
 }
 
 
