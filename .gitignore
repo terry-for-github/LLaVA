@@ -38,5 +38,6 @@ playground/
 logs/
 results/
 ckpts/
+naohai_*
 .deepspeed_env
 run.sh

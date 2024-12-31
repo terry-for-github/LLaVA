@@ -13,11 +13,15 @@
     "train_micro_batch_size_per_gpu": "auto",
     "train_batch_size": "auto",
     "gradient_accumulation_steps": "auto",
+    "communication_data_type": "bf16",
+    "wall_clock_breakdown": true,
+    "gradient_clipping": "auto",
     "zero_optimization": {
         "stage": 2,
         "overlap_comm": false,
         "contiguous_gradients": true,
         "sub_group_size": 1e9,
-        "reduce_bucket_size": "auto"
+        "reduce_bucket_size": 8e6,
+        "allgather_bucket_size": 8e6
     }
 }

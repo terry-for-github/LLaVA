@@ -18,7 +18,6 @@ deepspeed llava/train/train_mem.py \
     --per_device_train_batch_size 16 \
     --per_device_eval_batch_size 4 \
     --gradient_accumulation_steps 2 \
-    --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 24000 \
     --save_total_limit 1 \
@@ -26,6 +25,7 @@ deepspeed llava/train/train_mem.py \
     --weight_decay 0. \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
+    --max_grad_norm 0.5 \
     --logging_steps 1 \
     --tf32 True \
     --model_max_length 2048 \
