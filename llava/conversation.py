@@ -16,6 +16,7 @@ class SeparatorStyle(Enum):
     PLAIN = auto()
     LLAMA_2 = auto()
     LLAMA_3 = auto()
+    BAICHUAN = auto()
 
 
 @dataclasses.dataclass
@@ -101,6 +102,16 @@ class Conversation:
                 else:
                     ret += role + "\n"
             return ret
+        elif self.sep_style == SeparatorStyle.BAICHUAN:
+            seps = [self.sep, self.sep2]
+            ret = self.system + seps[0]
+            for i, (role, message) in enumerate(messages):
+                if message:
+                    if type(message) is tuple:
+                        message, _, _ = message
+                    ret += role + ' ' + message + seps[i % 2]
+                else:
+                    ret += role + ' '
         elif self.sep_style == SeparatorStyle.MPT:
             ret = self.system + self.sep
             for role, message in messages:
@@ -386,6 +397,18 @@ conv_llama_3 = Conversation(
     stop_token_ids=[128009],
 )
 
+conv_llava_baichuan = Conversation(
+    system="A chat between a curious human and an artificial intelligence assistant. "
+           "The assistant gives helpful, detailed, and polite answers to the human's questions.",
+    roles=("<reserved_106>", "<reserved_107>"),
+    version="baichuan",
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.BAICHUAN,
+    sep=" ",
+    sep2="</s>",
+)
+
 conv_llava_v1_mmtag = Conversation(
     system="A chat between a curious user and an artificial intelligence assistant. "
            "The assistant is able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language."
@@ -453,6 +476,7 @@ conv_templates = {
 
     "mpt": conv_mpt,
     "qwen": conv_qwen,
+    "baichuan": conv_llava_baichuan,
 }
 
 

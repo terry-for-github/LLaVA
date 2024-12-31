@@ -59,6 +59,7 @@ class ModelArguments:
     vision_tower: Optional[str] = field(default=None)
     mm_vision_select_layer: Optional[int] = field(default=-1)   # default to the last layer
     pretrain_mm_mlp_adapter: Optional[str] = field(default=None)
+    continue_finetune: bool = field(default=False)
     mm_projector_type: Optional[str] = field(default='linear')
     mm_use_im_start_end: bool = field(default=False)
     mm_use_im_patch_token: bool = field(default=True)
@@ -68,8 +69,9 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    data_path: str = field(default=None,
+    data_path: Optional[str] = field(default=None,
                            metadata={"help": "Path to the training data."})
+    data_path_list: List[str] = field(default_factory=list, metadata={"help": "Path to the training data."})
     lazy_preprocess: bool = False
     is_multimodal: bool = False
     image_folder: Optional[str] = field(default=None)
@@ -588,6 +590,89 @@ def preprocess_v1(
     )
 
 
+def preprocess_baichuan(
+    sources,
+    tokenizer: transformers.PreTrainedTokenizer,
+    has_image: bool = False
+) -> Dict:
+    conv = conversation_lib.default_conversation.copy()
+    roles = {"human": conv.roles[0], "gpt": conv.roles[1]}
+
+    # Apply prompt templates
+    conversations = []
+    for i, source in enumerate(sources):
+        if roles[source[0]["from"]] != conv.roles[0]:
+            # Skip the first one if it is not from human
+            source = source[1:]
+
+        conv.messages = []
+        for j, sentence in enumerate(source):
+            role = roles[sentence["from"]]
+            assert role == conv.roles[j % 2], f"{i}"
+            conv.append_message(role, sentence["value"])
+        conversations.append(conv.get_prompt())
+    # Tokenize conversations
+
+    if has_image:
+        input_ids = torch.stack([tokenizer_image_token(prompt, tokenizer, return_tensors='pt') for prompt in conversations], dim=0)
+    else:
+        input_ids = tokenizer(
+            conversations,
+            return_tensors="pt",
+            padding="longest",
+            max_length=tokenizer.model_max_length,
+            truncation=True,
+        ).input_ids
+
+    targets = input_ids.clone()
+
+    assert conv.sep_style == conversation_lib.SeparatorStyle.BAICHUAN
+
+    # Mask targets
+    sep = conv.sep + conv.roles[1] + " "
+    for conversation, target in zip(conversations, targets):
+        total_len = int(target.ne(tokenizer.pad_token_id).sum())
+
+        rounds = conversation.split(conv.sep2)
+        # print(len(conversations), rounds)
+        cur_len = 1
+        target[:cur_len] = IGNORE_INDEX
+        for i, rou in enumerate(rounds):
+            if rou == "":
+                break
+
+            parts = rou.split(sep)
+            if len(parts) != 2:
+                break
+            parts[0] += sep
+
+            if has_image:
+                round_len = len(tokenizer_image_token(rou, tokenizer))
+                instruction_len = len(tokenizer_image_token(parts[0], tokenizer)) - 2
+            else:
+                round_len = len(tokenizer(rou).input_ids)
+                instruction_len = len(tokenizer(parts[0]).input_ids) - 2
+            # if i != 0 and not tokenizer.legacy and IS_TOKENIZER_GREATER_THAN_0_14:
+            # print('target:', cur_len, instruction_len, round_len, tokenizer.decode(target[cur_len:cur_len+instruction_len], skip_special_tokens=False), flush=True)
+            target[cur_len:cur_len+instruction_len] = IGNORE_INDEX
+
+            cur_len += round_len
+        target[cur_len:] = IGNORE_INDEX
+
+        if cur_len < tokenizer.model_max_length:
+            if cur_len != total_len:
+                target[:] = IGNORE_INDEX
+                print(
+                    f"WARNING: tokenization mismatch: {cur_len} vs. {total_len}."
+                    f" (ignored)"
+                )
+
+    return dict(
+        input_ids=input_ids,
+        labels=targets,
+    )
+
+
 def preprocess_mpt(
     sources,
     tokenizer: transformers.PreTrainedTokenizer,
@@ -796,6 +881,8 @@ def preprocess(
         return preprocess_llama_2(sources, tokenizer, has_image=has_image)
     if conversation_lib.default_conversation.version == "qwen":
         return preprocess_qwen(sources, tokenizer, has_image=has_image)
+    if conversation_lib.default_conversation.sep_style == conversation_lib.SeparatorStyle.BAICHUAN:
+        return preprocess_baichuan(sources, tokenizer, has_image=has_image)
     if conversation_lib.default_conversation.version.startswith("v1"):
         return preprocess_v1(sources, tokenizer, has_image=has_image)
     if conversation_lib.default_conversation.version == "mpt":
@@ -830,19 +917,109 @@ def preprocess(
     return dict(input_ids=input_ids, labels=targets)
 
 
+def get_onevision_datalist(data_path: str):
+    dataset_list = os.listdir(data_path)
+    json_list = []
+    for dataset in dataset_list:
+        if dataset in ['cambrian(filtered)', 'ureader_kg', 'ureader_qa', 'llava_next_raw_format']:
+            json_list.append(os.path.join(data_path, dataset, dataset+'_processed.json'))
+        else:
+            json_list.append(os.path.join(data_path, dataset, dataset+'_anno.json'))
+    list_data_dict = []
+    for i in range(len(dataset_list)):
+        if dataset_list[i] == 'VisualWebInstruct(filtered)':
+            rank0_print('Skipping', json_list[i], '...')
+            continue
+        rank0_print('Loading', json_list[i], '...')
+        data_list = json.load(open(json_list[i], 'r'))
+        if dataset_list[i] == 'hme100k':
+            # these images are not available
+            for bad_index in [49533, 49499, 49496, 49493, 49492, 49477, 49464, 49445, 49434, 49420, 49394, 49391, 49366, 49346]:
+                del data_list[bad_index]
+        if dataset_list[i] in ['cambrian(filtered)', 'ureader_kg', 'ureader_qa', 'llava_next_raw_format']:
+            for data_dict in data_list:
+                data_dict['image'] = data_path + '/' + dataset_list[i] + '/' + data_dict['image']
+        else:
+            for data_dict in data_list:
+                if 'image' in data_dict:
+                    data_dict['image'] = data_path + '/'  + data_dict['image']
+        if dataset_list[i] == 'lrv_normal(filtered)':
+            del data_list[7527] # only gpt
+            del data_list[4675] # has message['from'] == 'Answer'
+            del data_list[1475] # has message['from'] == 'Answer'
+        factor = 1
+        if dataset_list[i] in ['sroie', 'hme100k', 'tallyqa(cauldron,llava_format)']:
+            factor = 0.1
+        elif dataset_list[i] in ['k12_printing', 'clevr(cauldron,llava_format)', 'dvqa(cauldron,llava_format)', 'figureqa(cauldron,llava_format)']:
+            factor = 0.01
+        elif dataset_list[i] in ['scienceqa(nona_context)', 'FigureQA(MathV360K)', 'IconQA(MathV360K)', 'PMC-VQA(MathV360K)', 'raven(cauldron)', 'iconqa(cauldron,llava_format)', 'tqa(cauldron,llava_format)']:
+            factor = 0.05
+        elif dataset_list[i] in ['magpie_pro(l3_80b_mt)', 'magpie_pro(l3_80b_st)', 'magpie_pro(qwen2_72b_st)']:
+            factor = 0.5
+        data_list = data_list[:int(len(data_list) * factor)]
+        if dataset_list[i] in ['websight(cauldron)', 'multihiertt(cauldron)', 'geomverse(cauldron)', 'dvqa(cauldron,llava_format)',
+                        'visual7w(cauldron,llava_format)', 'iconqa(cauldron,llava_format)', 'aokvqa(cauldron,llava_format)', 'hitab(cauldron,llava_format)', 'screen2words(cauldron)',
+                        'figureqa(cauldron,llava_format)', 'vistext(cauldron)', 'ai2d(cauldron,llava_format)', 'robut_wikisql(cauldron)', 'tabmwp(cauldron)', 'robut_wtq(cauldron,llava_format)',
+                        'iam(cauldron)', 'vqarad(cauldron,llava_format)', 'intergps(cauldron,llava_format)', 'hateful_memes(cauldron,llava_format)', 'diagram_image_to_text(cauldron)',
+                        'chart2text(cauldron)', 'clevr(cauldron,llava_format)', 'raven(cauldron)', 'visualmrc(cauldron)', 'vsr(cauldron,llava_format)', 'infographic_vqa_llava_format',
+                        'rendered_text(cauldron)', 'scienceqa(cauldron,llava_format)', 'mapqa(cauldron,llava_format)', 'tqa(cauldron,llava_format)', 'st_vqa(cauldron,llava_format)',
+                        'robut_sqa(cauldron)', 'tallyqa(cauldron,llava_format)', 'chartqa(cauldron,llava_format)', 'lrv_normal(filtered)']:
+            for data_dict in data_list:
+                first_message = data_dict['conversations'][0]
+                if DEFAULT_IMAGE_TOKEN not in first_message['value']:
+                    first_message['value'] = DEFAULT_IMAGE_TOKEN + '\n' + first_message['value']
+        list_data_dict.extend(data_list)
+    return list_data_dict
+
 class LazySupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, data_path: str,
+    def __init__(self, data_path: Optional[str],
                  tokenizer: transformers.PreTrainedTokenizer,
                  data_args: DataArguments):
         super(LazySupervisedDataset, self).__init__()
-        list_data_dict = json.load(open(data_path, "r"))
-
         rank0_print("Formatting inputs...Skip in lazy mode")
         self.tokenizer = tokenizer
-        self.list_data_dict = list_data_dict
         self.data_args = data_args
+        if data_path is not None:
+            list_data_dict = json.load(open(data_path, "r"))
+            self.list_data_dict = list_data_dict
+        else:
+            self.list_data_dict = []
+            for json_path in data_args.data_path_list:
+                print(f"Loading {json_path}")
+                if 'onevision' in json_path:
+                    self.list_data_dict.extend(get_onevision_datalist(json_path))
+                    continue
+                elif "blip_laion_cc_sbu_558k" in json_path:
+                    path_prefix = "./playground/pretrain/images/"
+                elif "DCI_8K" in json_path:
+                    path_prefix = "./playground/image_caption/DCI/"
+                elif "DF_1M" in json_path or "DF_100K" in json_path:
+                    path_prefix = "./playground/image_caption/DenseFusion/"
+                elif "DOCCI_15K" in json_path:
+                    path_prefix = "./playground/image_caption/DOCCI/"
+                elif "MMInstruct-18K" in json_path:
+                    path_prefix = "./playground/image_caption/MMInstruct/"
+                elif "ShareGPT4V_102K" in json_path:
+                    path_prefix = "./playground/image_caption/ShareGPT4V/"
+                elif "GBC-10M" in json_path:
+                    path_prefix = "./playground/image_caption/"
+                elif "MMInstruct-GPT4V" in json_path:
+                    path_prefix = "./playground/MMInstruct-GPT4V/images/"
+                else:
+                    raise ValueError(f"Unknown dataset: {json_path}")
+
+                list_data_dict = json.load(open(json_path, "r"))
+                for data_dict in list_data_dict:
+                    data_dict['image'] = os.path.join(path_prefix, data_dict['image'])
+                    if 'image_caption' in json_path:
+                        human_message = data_dict['conversations'][0]
+                        gpt_message = data_dict['conversations'][1]
+                        gpt_message['from'] = 'gpt'
+                        data_dict['conversations'] = [human_message, gpt_message]
+                    self.list_data_dict.append(data_dict)
+        print('Num conversations:', len(self.list_data_dict))
 
     def __len__(self):
         return len(self.list_data_dict)
@@ -871,9 +1048,13 @@ class LazySupervisedDataset(Dataset):
         assert len(sources) == 1, "Don't know why it is wrapped to a list"  # FIXME
         if 'image' in sources[0]:
             image_file = self.list_data_dict[i]['image']
-            image_folder = self.data_args.image_folder
             processor = self.data_args.image_processor
-            image = Image.open(os.path.join(image_folder, image_file)).convert('RGB')
+            if self.data_args.data_path is not None:
+                img_path = os.path.join(self.data_args.image_folder, image_file)
+            else:
+                img_path = image_file
+            with Image.open(img_path) as img:
+                image = img.convert('RGB')
             if self.data_args.image_aspect_ratio == 'pad':
                 def expand2square(pil_img, background_color):
                     width, height = pil_img.size
@@ -998,6 +1179,13 @@ def train(attn_implementation=None):
                 cache_dir=training_args.cache_dir,
                 **bnb_model_from_pretrained_args
             )
+        elif 'naohai' in model_args.model_name_or_path:
+            model = LlavaBaichuanForCausalLM.from_pretrained(
+                model_args.model_name_or_path,
+                cache_dir=training_args.cache_dir,
+                torch_dtype=compute_dtype,
+                **bnb_model_from_pretrained_args,
+            )
         elif (
             'llama' in model_args.model_name_or_path.lower() or
             'vicuna' in model_args.model_name_or_path.lower()
@@ -1006,7 +1194,7 @@ def train(attn_implementation=None):
                 model_args.model_name_or_path,
                 cache_dir=training_args.cache_dir,
                 attn_implementation=attn_implementation,
-                torch_dtype=(torch.bfloat16 if training_args.bf16 else None),
+                torch_dtype=compute_dtype,
                 **bnb_model_from_pretrained_args
             )
         elif "qwen" in model_args.model_name_or_path.lower():
@@ -1022,7 +1210,7 @@ def train(attn_implementation=None):
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
             attn_implementation=attn_implementation,
-            torch_dtype=(torch.bfloat16 if training_args.bf16 else None),
+            torch_dtype=compute_dtype,
             **bnb_model_from_pretrained_args
         )
     model.config.use_cache = False
@@ -1075,6 +1263,14 @@ def train(attn_implementation=None):
             model_max_length=training_args.model_max_length,
             padding_side="right"
         )
+    elif 'naohai' in model_args.model_name_or_path:
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=training_args.cache_dir,
+            model_max_length=training_args.model_max_length,
+            padding_side="right",
+            trust_remote_code=True,
+        )
     else:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
@@ -1093,6 +1289,8 @@ def train(attn_implementation=None):
             )
     elif model_args.version == "v0.5":
         tokenizer.pad_token = tokenizer.unk_token
+    elif model_args.version == 'baichuan':
+        conversation_lib.default_conversation = conversation_lib.conv_templates['baichuan']
     else:
         if tokenizer.unk_token is not None:
             tokenizer.pad_token = tokenizer.unk_token
@@ -1108,7 +1306,7 @@ def train(attn_implementation=None):
             model_args=model_args,
             fsdp=training_args.fsdp
         )
-        
+
         vision_tower = model.get_vision_tower()
         vision_tower.to(dtype=torch.bfloat16 if training_args.bf16 else torch.float16, device=training_args.device)
 

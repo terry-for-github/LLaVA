@@ -37,6 +37,7 @@ def config_logger():
             oldest_log = log_files.pop(0)
             shutil.rmtree(oldest_log)
 
+
 if __name__ == "__main__":
     config_logger()
     train(attn_implementation="flash_attention_2")
