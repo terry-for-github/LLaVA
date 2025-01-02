@@ -5,17 +5,15 @@ echo http_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 echo TRANSFORMERS_OFFLINE=1 >> .deepspeed_env
 echo WANDB_PROJECT=qwen_ex >> .deepspeed_env
 
-RUN_NAME=finetune_qwen25_7b_sgemf_ovmmi_onlyqa_1214_short_1220
-NUM_TRIAL=2
+RUN_NAME=finetune_qwen25_7b_sgemf_ov_1214_short_0101
+NUM_TRIAL=3
     # --data_path ./playground/finetune/llava_v1_5_mix665k.json \
 
-deepspeed -H /hostfile --num_nodes 2 \
-    llava/train/train_mem.py \
+deepspeed llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json \
     --model_name_or_path Qwen/Qwen2.5-7B-Instruct \
     --version qwen \
     --data_path_list ./playground/onevision \
-    playground/MMInstruct-GPT4V/jsons_all/qa_en_clean.json \
     --image_folder ./playground/finetune \
     --vision_tower openai/clip-vit-large-patch14-336 \
     --pretrain_mm_mlp_adapter ./ckpts/llava-qwen25-7b-pretrain-sgemf-1214/mm_projector.bin \
@@ -26,7 +24,7 @@ deepspeed -H /hostfile --num_nodes 2 \
     --image_aspect_ratio pad \
     --group_by_modality_length False \
     --bf16 True \
-    --output_dir ./ckpts/llava-qwen25-7b-sgemf-ovmmi-onlyqa-1214-short-1220 \
+    --output_dir ./ckpts/llava-qwen25-7b-sgemf-ov-1214-short-0101 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 2 \
     --gradient_accumulation_steps 4 \
