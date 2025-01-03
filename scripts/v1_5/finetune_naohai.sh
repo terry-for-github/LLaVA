@@ -6,11 +6,10 @@ echo TRANSFORMERS_OFFLINE=1 >> .deepspeed_env
 echo WANDB_PROJECT=naohai >> .deepspeed_env
 
 RUN_NAME=finetune_naohai_7b
-NUM_TRIAL=8
+NUM_TRIAL=14
 
-deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
-    llava/train/train_mem.py \
-    --deepspeed ./scripts/zero2_offload.json  \
+deepspeed llava/train/train_mem.py \
+    --deepspeed ./scripts/zero2.json  \
     --model_name_or_path ./naohai_7b \
     --version baichuan \
     --data_path ./playground/finetune/llava_v1_5_mix665k.json \
@@ -24,11 +23,11 @@ deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
     --image_aspect_ratio pad \
     --group_by_modality_length False \
     --bf16 True \
-    --output_dir ./ckpts/llava-naohai-7b \
+    --output_dir /checkpoint \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 4 \
-    --gradient_accumulation_steps 2 \
-    --save_strategy "steps" \
+    --per_device_train_batch_size 2 \
+    --gradient_accumulation_steps 4 \
+    --save_strategy "no" \
     --save_steps 20000 \
     --save_total_limit 1 \
     --learning_rate 2e-5 \
@@ -42,5 +41,4 @@ deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to wandb \
-    --disable_tqdm True \
     --run_name $RUN_NAME 2>&1 | tee logs/$RUN_NAME-$NUM_TRIAL.log
