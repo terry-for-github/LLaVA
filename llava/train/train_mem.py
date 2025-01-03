@@ -39,5 +39,5 @@ def config_logger():
 
 
 if __name__ == "__main__":
-    config_logger()
+    # config_logger()
     train(attn_implementation="flash_attention_2")
