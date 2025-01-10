@@ -4,22 +4,23 @@ echo https_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 echo http_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 echo TRANSFORMERS_OFFLINE=1 >> .deepspeed_env
 echo WANDB_PROJECT=naohai >> .deepspeed_env
-    # playground/image_caption/DCI/ANNO/DCI_8K_exist.json \
-    # playground/image_caption/DenseFusion/ANNO/DF_1M_exist.json \
-    # playground/image_caption/DOCCI/ANNO/DOCCI_15K_exist.json \
-    # playground/image_caption/GBC-10M/train_4_clean_exist.json \
-    # playground/image_caption/MMInstruct/ANNO/MMInstruct-18K_exist.json \
-    # playground/image_caption/ShareGPT4V/ANNO/ShareGPT4V_102K_exist.json \
+    
 
-RUN_NAME=pretrain_naohai_7b
-NUM_TRIAL=6
+RUN_NAME=pretrain_naohai_7b_gbc4
+NUM_TRIAL=1
 
-deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
+deepspeed \
     llava/train/train_mem.py \
     --deepspeed ./scripts/zero0.json \
     --model_name_or_path ./naohai_7b \
     --version plain \
     --data_path_list ./playground/pretrain/blip_laion_cc_sbu_558k.json \
+    playground/image_caption/DCI/ANNO/DCI_8K_exist.json \
+    playground/image_caption/DenseFusion/ANNO/DF_1M_exist.json \
+    playground/image_caption/DOCCI/ANNO/DOCCI_15K_exist.json \
+    playground/image_caption/GBC-10M/train_4_clean_exist.json \
+    playground/image_caption/MMInstruct/ANNO/MMInstruct-18K_exist.json \
+    playground/image_caption/ShareGPT4V/ANNO/ShareGPT4V_102K_exist.json \
     --image_folder ./playground/pretrain/images \
     --vision_tower openai/clip-vit-large-patch14-336 \
     --mm_projector_type mlp2x_gelu \
@@ -28,11 +29,11 @@ deepspeed -H /hostfile -i node_13:0,1,2,3,4,5,6,7@node_05:0,1,2,3,4,5,6,7 \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./ckpts/llava-naohai-7b-pretrain \
+    --output_dir ./ckpts/llava-naohai-7b-pretrain-gbc4 \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 4 \
-    --save_strategy "steps" \
+    --save_strategy "no" \
     --save_steps 1000 \
     --save_total_limit 1 \
     --learning_rate 1e-3 \

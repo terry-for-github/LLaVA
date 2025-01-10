@@ -5,17 +5,17 @@ echo http_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 echo TRANSFORMERS_OFFLINE=1 >> .deepspeed_env
 echo WANDB_PROJECT=naohai >> .deepspeed_env
 
-RUN_NAME=finetune_naohai_7b
-NUM_TRIAL=14
+RUN_NAME=finetune_naohai_7b_gbc4_ovmmi
+NUM_TRIAL=1
 
 deepspeed llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json  \
     --model_name_or_path ./naohai_7b \
     --version baichuan \
-    --data_path ./playground/finetune/llava_v1_5_mix665k.json \
-    --image_folder ./playground/finetune \
+    --data_path_list playground/onevision \
+    playground/MMInstruct-GPT4V/jsons_all/qa_en_clean.json \
     --vision_tower openai/clip-vit-large-patch14-336 \
-    --pretrain_mm_mlp_adapter ./ckpts/llava-naohai-7b-pretrain/mm_projector.bin \
+    --pretrain_mm_mlp_adapter ./ckpts/llava-naohai-7b-pretrain-fix-3/mm_projector.bin \
     --mm_projector_type mlp2x_gelu \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
@@ -42,3 +42,5 @@ deepspeed llava/train/train_mem.py \
     --lazy_preprocess True \
     --report_to wandb \
     --run_name $RUN_NAME 2>&1 | tee logs/$RUN_NAME-$NUM_TRIAL.log
+
+mv /checkpoint /userhome/checkpoints/llava-naohai-7b-gbc4-ovmmi
