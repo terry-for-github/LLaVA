@@ -15,6 +15,8 @@ data_path = "playground/pretrain/blip_laion_cc_sbu_558k.json"
 image_folder = "playground/pretrain/images"
 mm_use_im_start_end = false
 mm_use_im_patch_token = false
+
+
 lazy_preprocess = true
 
 # training
@@ -31,7 +33,7 @@ max_grad_norm = 0.5
 gradient_checkpointing = true
 dataloader_num_workers = 4
 
-# output
-output_dir = "ckpts/llava-llama32-3b-pretrain"
-save_strategy = "no"
+# save and logging
+save_steps = 500
+save_total_limit = 1
 logging_steps = 1

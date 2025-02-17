@@ -104,7 +104,7 @@ class Conversation:
             #     else:
             #         ret += role + "\n"
             # return ret
-        elif self.sep_style == SeparatorStyle.CHATML:
+        elif self.sep_style == SeparatorStyle.QWEN:
             ret = "" if self.system == "" else self.system + self.sep + "\n"
             for role, message in messages:
                 if message:
@@ -473,7 +473,7 @@ conv_qwen = Conversation(
     version="qwen",
     messages=[],
     offset=0,
-    sep_style=SeparatorStyle.CHATML,
+    sep_style=SeparatorStyle.QWEN,
     sep="<|im_end|>",
 )
 

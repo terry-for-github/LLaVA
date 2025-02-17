@@ -8,6 +8,9 @@ mm_projector_type = "mlp2x_gelu"
 mm_vision_select_layer = -2
 model_max_length = 2048
 
+# continue training
+continue_finetune = true
+
 # data process
 version = "qwen"
 data_path = "playground/finetune/lmu_data.json"
@@ -32,9 +35,7 @@ max_grad_norm = 0.5
 gradient_checkpointing = true
 dataloader_num_workers = 4
 
-# output
-output_dir = "ckpts/llava-qwen25-7b-sgemf-ovmmi-1219-short-6k-lmu05"
-save_strategy = "steps"
+# save and logging
 save_steps = 4000
 save_total_limit = 1
 logging_steps = 1

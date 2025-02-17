@@ -120,7 +120,7 @@ def parse_config_arg():
         config = load_config(config_file)
         args = inject_config_to_args(config, args)
     sys.argv = [program] + args
-    print(sys.argv)
+    # print(sys.argv)
 
 
 if __name__ == '__main__':

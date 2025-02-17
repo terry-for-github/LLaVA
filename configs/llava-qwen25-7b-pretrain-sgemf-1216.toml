@@ -47,9 +47,7 @@ max_grad_norm = 0.5
 gradient_checkpointing = true
 dataloader_num_workers = 4
 
-# output
-output_dir = "ckpts/llava-qwen25-7b-pretrain-sgemf-1216"
-save_strategy = "steps"
+# save and logging
 save_steps = 10000
 save_total_limit = 1
 logging_steps = 1

@@ -1,13 +1,13 @@
 #!/bin/bash
 
-deepspeed llava/train/train_mem.py \
+deepspeed -i localhost:4,5,6,7 llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json \
     --model_name_or_path Qwen/Qwen2.5-3B-Instruct \
     --version qwen \
     --data_path ./playground/finetune/llava_v1_5_mix665k.json \
     --image_folder ./playground/finetune \
     --vision_tower openai/clip-vit-large-patch14-336 \
-    --pretrain_mm_mlp_adapter ./ckpts/llava-qwen25-3b-pretrain/mm_projector.bin \
+    --pretrain_mm_mlp_adapter ./ckpts/llava-qwen25-3b-pretrain-test/mm_projector.bin \
     --mm_projector_type mlp2x_gelu \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
@@ -15,12 +15,12 @@ deepspeed llava/train/train_mem.py \
     --image_aspect_ratio pad \
     --group_by_modality_length False \
     --bf16 True \
-    --output_dir ./ckpts/llava-qwen25-3b \
+    --output_dir ./ckpts/llava-qwen25-3b-test \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 4 \
     --max_grad_norm 0.5 \
-    --save_strategy "steps" \
+    --save_strategy "no" \
     --save_steps 50000 \
     --save_total_limit 1 \
     --learning_rate 2e-5 \
