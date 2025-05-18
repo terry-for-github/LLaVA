@@ -231,9 +231,9 @@ class PostProcessGraph(nn.Module):
             box_indices = torch.arange(len(pred_boxes), device=pred_boxes.device).repeat_interleave(mask.sum(dim=(1, 2)))
 
             # 计算 clip 和 box 对应的节点索引
-            clip_nodes = rel_node_start + clip_indices
+            clip_nodes = clip_node_start + clip_indices
             box_nodes = box_node_start + box_indices
-
+            # print(adj_matrix.shape, clip_nodes.min(), clip_nodes.max(), box_nodes.min(), box_nodes.max())
             adj_matrix[box_nodes, clip_nodes] = 1.
             adj_matrix[clip_nodes, box_nodes] = 1.
 
@@ -386,9 +386,11 @@ class SceneGraphVisionTower(nn.Module):
         node_embeddings[:, :576, :] = image_features
         for idx, result in enumerate(result_list):
             node_classes = result['nodes']['classes']
-            node_embeddings[idx, 576:576+self.num_boxes, :] = self.node_features[node_classes]
+            cur_num_boxes = self.node_features[node_classes].shape[0]
+            node_embeddings[idx, 576:576+cur_num_boxes, :] = self.node_features[node_classes]
             rel_classes = result['relations']['relation_classes']
-            node_embeddings[idx, 576+self.num_boxes:, :] = self.edge_features[rel_classes]
+            cur_num_relations = self.edge_features[rel_classes].shape[0]
+            node_embeddings[idx, 576+self.num_boxes:576+self.num_boxes+cur_num_relations, :] = self.edge_features[rel_classes]
         # result['adj_matrix'] = adj_matrix
         # result['nodes'] = {
         #     'coordinates': pred_boxes,

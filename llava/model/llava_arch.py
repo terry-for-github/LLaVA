@@ -157,7 +157,9 @@ class LlavaMetaForCausalLM(ABC):
         image_features = self.get_model().mm_projector(clip_features)
         adj_matrix, node_embeddings = self.get_model().sgg_tower(images=sgg_images, image_sizes=image_sizes, image_features=image_features, image_paths=image_paths, embed_tokens=self.get_model().get_input_embeddings())
         gcn_features = self.get_model().gcn_projector(node_embeddings=node_embeddings, adj_matrix=adj_matrix)
-        return torch.concatenate((image_features, gcn_features), dim=1)
+        # return gcn_features
+        return torch.concatenate((gcn_features, image_features), dim=1)
+        # return image_features
 
     def prepare_inputs_labels_for_multimodal(
         self, input_ids, position_ids, attention_mask, past_key_values, labels,

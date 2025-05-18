@@ -1,0 +1,6 @@
+HF_HOME=/userhome/huggingface
+https_proxy=http://127.0.0.1:7890
+http_proxy=http://127.0.0.1:7890
+TRANSFORMERS_OFFLINE=1
+WANDB_PROJECT=qwen_ex
+NCCL_TIMEOUT=1200000

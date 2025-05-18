@@ -6,7 +6,11 @@ import torch.nn.functional as F
 class GCN(nn.Module):
     def __init__(self, hidden_size):
         super(GCN, self).__init__()
-        self.layers = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(4)])
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, hidden_size)
+        # self.layers = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(4)])
         self.dropout = nn.Dropout(0.05)
 
     def laplace(self, A):
@@ -29,8 +33,9 @@ class GCN(nn.Module):
 
     def forward(self, node_embeddings, adj_matrix):
         adj_normalized = self.laplace(adj_matrix)
+        layers = [self.fc1, self.fc2, self.fc3, self.fc4]
         x = node_embeddings
-        for layer in self.layers:
+        for layer in layers:
             # 图卷积计算
             x_next = layer(torch.bmm(adj_normalized, x))
             x_next = F.relu(x_next)
