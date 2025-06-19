@@ -1,13 +1,16 @@
 #!/bin/bash
+echo HF_HOME=/userhome/huggingface > .deepspeed_env
+echo https_proxy=http://127.0.0.1:7890 >> .deepspeed_env
+echo http_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 
-deepspeed llava/train/train_mem.py \
+deepspeed -H /host llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json \
     --model_name_or_path lmsys/vicuna-7b-v1.5 \
     --version v1 \
     --data_path ./playground/finetune/llava_v1_5_mix665k.json \
     --image_folder ./playground/finetune \
     --vision_tower openai/clip-vit-large-patch14-336 \
-    --pretrain_mm_mlp_adapter ./ckpts/llava-v1.5-7b-pretrain/mm_projector.bin \
+    --pretrain_mm_mlp_adapter ./checkpoints/llava-v1.5-7b-pretrain/mm_projector.bin\
     --mm_projector_type mlp2x_gelu \
     --mm_vision_select_layer -2 \
     --mm_use_im_start_end False \
@@ -15,7 +18,7 @@ deepspeed llava/train/train_mem.py \
     --image_aspect_ratio pad \
     --group_by_modality_length False \
     --bf16 True \
-    --output_dir ./ckpts/llava-v1.5-7b \
+    --output_dir ./checkpoints/llava-v1.5-7b \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 4 \

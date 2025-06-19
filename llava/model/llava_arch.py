@@ -90,11 +90,20 @@ class LlavaMetaModel:
                 p.requires_grad = True
 
         if pretrain_mm_mlp_adapter is not None:
-            mm_projector_weights = torch.load(pretrain_mm_mlp_adapter, map_location='cpu', weights_only=True)
-            def get_w(weights, keyword):
-                return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
+            if pretrain_mm_mlp_adapter.endswith('.bin'):
+                mm_projector_weights = torch.load(pretrain_mm_mlp_adapter, map_location='cpu', weights_only=True)
 
-            self.mm_projector.load_state_dict(get_w(mm_projector_weights, 'mm_projector'))
+                def get_w(weights, keyword):
+                    return {k.split(keyword + '.')[1]: v for k, v in weights.items() if keyword in k}
+
+                self.mm_projector.load_state_dict(get_w(mm_projector_weights, 'mm_projector'))
+            elif pretrain_mm_mlp_adapter.endswith('.safetensors'):
+                from safetensors.torch import load_file
+                mm_projector_weights = load_file(pretrain_mm_mlp_adapter)
+                mm_projector_weights = {
+                    k.replace('connector.mlp.', ''): v for k, v in mm_projector_weights.items() if 'connector.mlp.' in k
+                }
+                self.mm_projector.load_state_dict(mm_projector_weights, strict=True)
 
 
 def unpad_image(tensor, original_size):

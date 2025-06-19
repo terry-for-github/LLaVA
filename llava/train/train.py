@@ -985,6 +985,9 @@ def train(attn_implementation=None):
     else:
         safe_save_model_for_hf_trainer(trainer=trainer,
                                        output_dir=training_args.output_dir)
+    del model, trainer
+    torch.cuda.empty_cache()
+    torch.distributed.barrier()
     torch.distributed.destroy_process_group()
 
 
