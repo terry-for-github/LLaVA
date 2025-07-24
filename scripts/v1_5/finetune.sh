@@ -3,7 +3,7 @@ echo HF_HOME=/userhome/huggingface > .deepspeed_env
 echo https_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 echo http_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 
-deepspeed -H /host llava/train/train_mem.py \
+deepspeed llava/train/train_mem.py \
     --deepspeed ./scripts/zero2.json \
     --model_name_or_path lmsys/vicuna-7b-v1.5 \
     --version v1 \
@@ -22,7 +22,6 @@ deepspeed -H /host llava/train/train_mem.py \
     --num_train_epochs 1 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 4 \
-    --max_grad_norm 0.5 \
     --save_strategy "steps" \
     --save_steps 50000 \
     --save_total_limit 1 \

@@ -3,7 +3,7 @@ echo HF_HOME=/userhome/huggingface > .deepspeed_env
 echo https_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 echo http_proxy=http://127.0.0.1:7890 >> .deepspeed_env
 
-deepspeed -H /host llava/train/train_mem.py \
+deepspeed llava/train/train_mem.py \
     --deepspeed ./scripts/zero0.json \
     --model_name_or_path lmsys/vicuna-7b-v1.5 \
     --version plain \
@@ -16,7 +16,7 @@ deepspeed -H /host llava/train/train_mem.py \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
     --bf16 True \
-    --output_dir ./checkpoints/llava-v1.5-7b-pretrain \
+    --output_dir ./checkpoints/llava-v1.5-7b-pretrain-nnl \
     --num_train_epochs 1 \
     --per_device_train_batch_size 16 \
     --per_device_eval_batch_size 4 \
