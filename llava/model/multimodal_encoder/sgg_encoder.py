@@ -38,9 +38,11 @@ def draw_(image_path, boxes, labels, rel_labels, rel_pairs, output_path):
         x1, y1, x2, y2 = box
         # assert 0 <= x1 <= x2 <= 1, f'x1: {x1}, x2: {x2}'
         # assert 0 <= y1 <= y2 <= 1, f'y1: {y1}, y2: {y2}'
-        x1, y1, x2, y2 = x1 * width, y1 * height, x2 * width, y2 * height
+        x1, y1, x2, y2 = x1.item() * width, y1.item() * height, x2.item() * width, y2.item() * height
         label = labels[i]
         color = colors[i]
+        # if '003113916.jpg' in image_path:
+        #     print(image_path, x1, y1, x2, y2, width, height, label)
 
         # 画出bounding box
         rect = plt.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2, edgecolor=color, facecolor='none')
@@ -67,6 +69,7 @@ def draw_(image_path, boxes, labels, rel_labels, rel_pairs, output_path):
     nx.draw_networkx_edge_labels(G, pos, edge_labels={(u, v): G[u][v]['label'] for u, v in G.edges()}, font_size=10, ax=ax2, label_pos=0.25, bbox=dict(facecolor='white', alpha=0.5))
 
     # 保存图片
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     plt.savefig(output_path, bbox_inches='tight')
     plt.close()
 
@@ -155,10 +158,10 @@ class PostProcessGraph(nn.Module):
 
             # 1. Delete the boxes with score < score_threshold
             keep_boxes = pred_scores > self.box_threshold
+            keep_boxes[self.num_boxes:] = False
             pred_boxes = pred_boxes[keep_boxes]
             pred_scores = pred_scores[keep_boxes]
             pred_classes = pred_classes[keep_boxes]
-            keep_boxes[self.num_boxes:] = False
 
             # 2. Delete relations with score < score_threshold
             keep_relations = all_rel_scores > self.rel_threshold
@@ -207,11 +210,11 @@ class PostProcessGraph(nn.Module):
             # Add box-clip feature connections (based on coverage)
             concat_image_sizes = torch.concatenate((image_sizes[i], image_sizes[i]), dim=-1)
             float_boxes = pred_boxes / concat_image_sizes
-            # output_path = './playground/debug/' + os.path.basename(image_paths[i])
+            # output_path = './playground/debug/' + os.path.basename(os.path.dirname(image_paths[i])) + '/' + os.path.basename(image_paths[i])
             # os.makedirs('./playground/debug', exist_ok=True)
             # box_labels = [str(idx)+ '-' + self.trans_classes[label.item()-1] + '-' + str(pred_scores[idx].item())[:4] for idx, label in enumerate(pred_classes)]
             # rel_labels = [self.trans_rel[rel.item()-1]for idx, rel in enumerate(all_rel_classes)]
-            # draw_(image_paths[i], float_boxes.cpu(), box_labels, rel_labels, all_node_pairs, output_path)
+            # draw_(image_paths[i], float_boxes.cpu(), box_labels, rel_labels, all_rel_pairs, output_path)
             
             pred_boxes = (torch.clamp(float_boxes, 0., 0.999) * 24).int()
             box_x1, box_y1, box_x2, box_y2 = pred_boxes[:, 0], pred_boxes[:, 1], pred_boxes[:, 2], pred_boxes[:, 3]
@@ -295,7 +298,7 @@ class SceneGraphVisionTower(nn.Module):
         self.num_relations = 32
         self.box_threshold = 0.2
         self.rel_threshold = 0.03
-        self.llm_hidden_size = 3072
+        self.llm_hidden_size = 2048
         self.sgma = PostProcessGraph(
             num_boxes=self.num_boxes,
             num_relations=self.num_relations,
@@ -323,7 +326,7 @@ class SceneGraphVisionTower(nn.Module):
         self.vision_tower.to(device='cuda', dtype=torch.bfloat16)
         checkpoint = torch.load(self.ckpt_path, map_location="cpu", weights_only=False)
         load_res = self.vision_tower.load_state_dict(clean_state_dict(checkpoint["model"]), strict=False)
-        print(load_res)
+        # print(load_res)
         rln_proj = getattr(self.vision_tower, "rln_proj", None)
         rln_classifier = getattr(self.vision_tower, "rln_classifier", None)
         rln_freq_bias = getattr(self.vision_tower, "rln_freq_bias", None)
@@ -415,50 +418,50 @@ class SceneGraphVisionTower(nn.Module):
         # }
         # print_output(result_list)
         return adj_matrix, node_embeddings
-        rel_scores = [result['graph']['rel_scores'] for result in result_list]
-        # rel_scores = torch.stack(rel_scores, dim=0)
-        bboxes = [result['graph']['pred_boxes'] for result in result_list]
-        all_node_pairs = [result['graph']['all_node_pairs'] for result in result_list]
-        rel_classes = [result['graph']['rel_classes'] for result in result_list]
-        results = {}
-        keep_rln_features = []
-        keep_sub_bboxes = []
-        keep_obj_bboxes = []
-        keep_pairs = []
-        keep_rels = []
-        keep_boxes = []
-        for i, (rel_score, rln_feature, bbox, all_node_pair, rel_class) in enumerate(zip(rel_scores, rln_features, bboxes, all_node_pairs, rel_classes)):
-            index = torch.nonzero(rel_score > 0.08).squeeze(-1)
-            if index.shape[0] == 0:
-                keep_rln_features.append([])
-                keep_pairs.append([])
-                keep_rels.append([])
-                keep_sub_bboxes.append([])
-                keep_obj_bboxes.append([])
-            else:
-                keep_rln_features.append(rln_feature[index])
-                keep_pairs.append(all_node_pair[index])
-                keep_sub_bboxes.append(bbox[all_node_pair[:, 0]][index])
-                keep_obj_bboxes.append(bbox[all_node_pair[:, 1]][index])
-                keep_rels.append(rel_class[index])
-                sub_ids = all_node_pair[:, 0][index]
-                obj_ids = all_node_pair[:, 1][index]
+        # rel_scores = [result['graph']['rel_scores'] for result in result_list]
+        # # rel_scores = torch.stack(rel_scores, dim=0)
+        # bboxes = [result['graph']['pred_boxes'] for result in result_list]
+        # all_node_pairs = [result['graph']['all_node_pairs'] for result in result_list]
+        # rel_classes = [result['graph']['rel_classes'] for result in result_list]
+        # results = {}
+        # keep_rln_features = []
+        # keep_sub_bboxes = []
+        # keep_obj_bboxes = []
+        # keep_pairs = []
+        # keep_rels = []
+        # keep_boxes = []
+        # for i, (rel_score, rln_feature, bbox, all_node_pair, rel_class) in enumerate(zip(rel_scores, rln_features, bboxes, all_node_pairs, rel_classes)):
+        #     index = torch.nonzero(rel_score > 0.08).squeeze(-1)
+        #     if index.shape[0] == 0:
+        #         keep_rln_features.append([])
+        #         keep_pairs.append([])
+        #         keep_rels.append([])
+        #         keep_sub_bboxes.append([])
+        #         keep_obj_bboxes.append([])
+        #     else:
+        #         keep_rln_features.append(rln_feature[index])
+        #         keep_pairs.append(all_node_pair[index])
+        #         keep_sub_bboxes.append(bbox[all_node_pair[:, 0]][index])
+        #         keep_obj_bboxes.append(bbox[all_node_pair[:, 1]][index])
+        #         keep_rels.append(rel_class[index])
+        #         sub_ids = all_node_pair[:, 0][index]
+        #         obj_ids = all_node_pair[:, 1][index]
               
-                all_box_indexes = torch.cat((sub_ids, obj_ids))
-                unique_tensor = torch.unique(all_box_indexes)
-                # print(sub_ids, obj_ids, unique_tensor)
-                mask = torch.zeros((unique_tensor.shape[0], unique_tensor.shape[0]))
-                for sub_id, obj_id in zip(sub_ids, obj_ids):
-                    sub_indice = torch.where(unique_tensor == sub_id)[0]
-                    obj_indice = torch.where(unique_tensor == obj_id)[0]
-                    mask[sub_indice, obj_indice] = 1
-                    # print(sub_indice, obj_indice)
+        #         all_box_indexes = torch.cat((sub_ids, obj_ids))
+        #         unique_tensor = torch.unique(all_box_indexes)
+        #         # print(sub_ids, obj_ids, unique_tensor)
+        #         mask = torch.zeros((unique_tensor.shape[0], unique_tensor.shape[0]))
+        #         for sub_id, obj_id in zip(sub_ids, obj_ids):
+        #             sub_indice = torch.where(unique_tensor == sub_id)[0]
+        #             obj_indice = torch.where(unique_tensor == obj_id)[0]
+        #             mask[sub_indice, obj_indice] = 1
+        #             # print(sub_indice, obj_indice)
                     
-        results['keep_sub_bboxes'] = keep_sub_bboxes
-        results['keep_obj_bboxes'] = keep_obj_bboxes
-        results['keep_rels'] = keep_rels
-        results['keep_rln_features'] = keep_rln_features ### relation视觉特征
-        results['keep_pairs'] = keep_pairs
+        # results['keep_sub_bboxes'] = keep_sub_bboxes
+        # results['keep_obj_bboxes'] = keep_obj_bboxes
+        # results['keep_rels'] = keep_rels
+        # results['keep_rln_features'] = keep_rln_features ### relation视觉特征
+        # results['keep_pairs'] = keep_pairs
         
         # if os.environ['RANK'] == '0':
         #     for i, result in enumerate(result_list): 
@@ -472,14 +475,14 @@ class SceneGraphVisionTower(nn.Module):
         #          np.savez('results/save_{}.npz'.format(i + 1), boxes=boxes,labels=labels, all_node_pairs=all_node_pairs, rel_classes=rel_classes)
         # self.image_id += 1
         
-        return results
+        # return results
 
 
     
 
-    def encode_graph_entities_embedding(sub_embeddings, obj_embeddings, rel_embeddings):
+    # def encode_graph_entities_embedding(sub_embeddings, obj_embeddings, rel_embeddings):
         
-        pass
+    #     pass
 
     @property
     def dummy_feature(self):
