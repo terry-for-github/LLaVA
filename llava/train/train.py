@@ -686,11 +686,15 @@ def preprocess_baichuan(
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
         conversations.append(conv.get_prompt())
+    # rank0_print(conversations)
     # Tokenize conversations
 
     if has_image:
         input_ids = torch.stack([tokenizer_image_token(prompt, tokenizer, return_tensors='pt') for prompt in conversations], dim=0)
     else:
+        # rank0_print('============================has no image============================')
+        old_add_bos = tokenizer.add_bos_token
+        tokenizer.add_bos_token = True
         input_ids = tokenizer(
             conversations,
             return_tensors="pt",
@@ -698,13 +702,15 @@ def preprocess_baichuan(
             max_length=tokenizer.model_max_length,
             truncation=True,
         ).input_ids
+        tokenizer.add_bos_token = old_add_bos
 
     targets = input_ids.clone()
 
     assert conv.sep_style == conversation_lib.SeparatorStyle.BAICHUAN
 
     # Mask targets
-    sep = conv.sep + conv.roles[1] + " "
+    sep = conv.sep + conv.roles[1]
+    # rank0_print(f'{sep=}')
     for conversation, target in zip(conversations, targets):
         total_len = int(target.ne(tokenizer.pad_token_id).sum())
 
@@ -720,15 +726,21 @@ def preprocess_baichuan(
             if len(parts) != 2:
                 break
             parts[0] += sep
-
+            # rank0_print(f'{rou=}')
+            # rank0_print(f'{parts[0]=}')
             if has_image:
                 round_len = len(tokenizer_image_token(rou, tokenizer))
-                instruction_len = len(tokenizer_image_token(parts[0], tokenizer)) - 2
+                instruction_len = len(tokenizer_image_token(parts[0], tokenizer)) - 1
             else:
+                old_add_bos = tokenizer.add_bos_token
+                tokenizer.add_bos_token = True
                 round_len = len(tokenizer(rou).input_ids)
-                instruction_len = len(tokenizer(parts[0]).input_ids) - 2
+                instruction_len = len(tokenizer(parts[0]).input_ids) - 1
+                tokenizer.add_bos_token = old_add_bos
             # if i != 0 and not tokenizer.legacy and IS_TOKENIZER_GREATER_THAN_0_14:
-            # print('target:', cur_len, instruction_len, round_len, tokenizer.decode(target[cur_len:cur_len+instruction_len], skip_special_tokens=False), flush=True)
+            # target[target == -200] = 125696
+            # rank0_print('target:', cur_len, instruction_len, round_len, tokenizer.decode(target[cur_len:cur_len+instruction_len], skip_special_tokens=False))
+            # target[target == 125696] = -200
             target[cur_len:cur_len+instruction_len] = IGNORE_INDEX
 
             cur_len += round_len
@@ -929,13 +941,13 @@ def preprocess_plain(
         assert len(source) == 2
         assert DEFAULT_IMAGE_TOKEN in source[0]['value']
         source[0]['value'] = DEFAULT_IMAGE_TOKEN
-        conversation = source[0]['value'] + '\n' + source[1]['value'] + conversation_lib.default_conversation.sep
+        conversation = source[0]['value'] + source[1]['value'] + conversation_lib.default_conversation.sep
         conversations.append(conversation)
     # tokenize conversations
     input_ids = [tokenizer_image_token(prompt, tokenizer, return_tensors='pt') for prompt in conversations]
     targets = copy.deepcopy(input_ids)
     for target, source in zip(targets, sources):
-        tokenized_len = len(tokenizer_image_token(source[0]['value'], tokenizer))
+        tokenized_len = len(tokenizer_image_token(source[0]['value'] + conversation_lib.default_conversation.sep, tokenizer))
         target[:tokenized_len] = IGNORE_INDEX
 
     return dict(input_ids=input_ids, labels=targets)

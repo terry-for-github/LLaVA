@@ -122,9 +122,9 @@ class Conversation:
                 if message:
                     if type(message) is tuple:
                         message, _, _ = message
-                    ret += role + ' ' + message + seps[i % 2]
+                    ret += role + message + seps[i % 2]
                 else:
-                    ret += role + ' '
+                    ret += role
         elif self.sep_style == SeparatorStyle.MPT:
             ret = self.system + self.sep
             for role, message in messages:
@@ -418,7 +418,7 @@ conv_llava_baichuan = Conversation(
     messages=(),
     offset=0,
     sep_style=SeparatorStyle.BAICHUAN,
-    sep=" ",
+    sep="",
     sep2="</s>",
 )
 
