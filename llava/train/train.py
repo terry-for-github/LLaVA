@@ -59,7 +59,7 @@ class ModelArguments:
     vision_tower: Optional[str] = field(default=None)
     mm_vision_select_layer: Optional[int] = field(default=-1)   # default to the last layer
     pretrain_mm_mlp_adapter: Optional[str] = field(default=None)
-    continue_finetune: bool = field(default=False)
+    pretrain_gcn_adapter: Optional[str] = field(default=None)
     mm_projector_type: Optional[str] = field(default='linear')
     mm_use_im_start_end: bool = field(default=False)
     mm_use_im_patch_token: bool = field(default=True)
@@ -172,7 +172,7 @@ def get_mm_adapter_state_maybe_zero_3(named_params, keys_to_match):
 def find_all_linear_names(model):
     cls = torch.nn.Linear
     lora_module_names = set()
-    multimodal_keywords = ['mm_projector', 'vision_tower', 'vision_resampler']
+    multimodal_keywords = ['mm_projector', 'gcn_projector', 'vision_tower', 'vision_resampler']
     for name, module in model.named_modules():
         if any(mm_keyword in name for mm_keyword in multimodal_keywords):
             continue
@@ -207,6 +207,16 @@ def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
                 torch.save(weight_to_save, os.path.join(mm_projector_folder, f'{current_folder}.bin'))
             else:
                 torch.save(weight_to_save, os.path.join(output_dir, f'mm_projector.bin'))
+        
+        keys_to_match = ['gcn_projector']
+        weight_to_save = get_mm_adapter_state_maybe_zero_3(trainer.model.named_parameters(), keys_to_match)
+        if trainer.args.local_rank == 0 or trainer.args.local_rank == -1:
+            if current_folder.startswith('checkpoint-'):
+                gcn_projector_folder = os.path.join(parent_folder, "gcn_projector")
+                os.makedirs(gcn_projector_folder, exist_ok=True)
+                torch.save(weight_to_save, os.path.join(gcn_projector_folder, f'{current_folder}.bin'))
+            else:
+                torch.save(weight_to_save, os.path.join(output_dir, f'gcn_projector.bin'))
         return
 
     if trainer.deepspeed:
@@ -1221,11 +1231,17 @@ class LazySupervisedDataset(Dataset):
         if 'image' in sources[0]:
             image_file = self.list_data_dict[i]['image']
             processor = self.data_args.image_processor
+            if hasattr(self.data_args, "sgg_processor"):
+                sgg_processor = self.data_args.sgg_processor
+                sgg_image = sgg_processor.preprocess(image, return_tensors='pt')['pixel_values'][0]
+                height = sgg_image.shape[1]
+                width = sgg_image.shape[2]
+                image_size = torch.tensor([width, height], dtype=torch.long)
             if self.data_args.data_path is not None:
-                img_path = os.path.join(self.data_args.image_folder, image_file)
+                image_path = os.path.join(self.data_args.image_folder, image_file)
             else:
-                img_path = image_file
-            with Image.open(img_path) as img:
+                image_path = image_file
+            with Image.open(image_path) as img:
                 image = img.convert('RGB')
             if self.data_args.image_aspect_ratio == 'pad':
                 def expand2square(pil_img, background_color):
@@ -1260,6 +1276,9 @@ class LazySupervisedDataset(Dataset):
         # image exist in the data
         if 'image' in self.list_data_dict[i]:
             data_dict['image'] = image
+            data_dict['sgg_image'] = sgg_image
+            data_dict['image_size'] = image_size
+            data_dict['image_path'] = image_path
         elif self.data_args.is_multimodal:
             # image does not exist in the data, but the model is multimodal
             if hasattr(self.data_args.image_processor, "crop_size"):
@@ -1267,6 +1286,9 @@ class LazySupervisedDataset(Dataset):
             else:
                 crop_size = self.data_args.image_processor.size
             data_dict['image'] = torch.zeros(3, crop_size['height'], crop_size['width'])
+            data_dict['sgg_image'] = torch.zeros(3, 800, 800)
+            data_dict['image_size'] = torch.tensor([800, 1333], dtype=torch.long)
+            data_dict['image_path'] = None
         return data_dict
 
 
@@ -1361,7 +1383,9 @@ class DataCollatorForSupervisedDataset(object):
                 batch['images'] = torch.stack(images)
             else:
                 batch['images'] = images
-
+            batch['sgg_images'] = [instance['sgg_image'] for instance in instances]
+            batch['image_sizes'] = torch.stack([instance['image_size'] for instance in instances])
+            batch['image_paths'] = [instance['image_path'] for instance in instances]
         return batch
 
 
@@ -1550,8 +1574,10 @@ def train(attn_implementation=None):
 
         vision_tower = model.get_vision_tower()
         vision_tower.to(dtype=torch.bfloat16 if training_args.bf16 else torch.float16, device=training_args.device)
+        model.model.sgg_tower.to(dtype=torch.bfloat16)
 
         data_args.image_processor = vision_tower.image_processor
+        data_args.sgg_processor = model.model.sgg_tower.image_processor
         data_args.is_multimodal = True
 
         model.config.image_aspect_ratio = data_args.image_aspect_ratio
@@ -1563,10 +1589,14 @@ def train(attn_implementation=None):
             model.requires_grad_(False)
             for p in model.get_model().mm_projector.parameters():
                 p.requires_grad = True
+            for p in model.get_model().gcn_projector.parameters():
+                p.requires_grad = True
 
         model.config.freeze_mm_mlp_adapter = training_args.freeze_mm_mlp_adapter
         if training_args.freeze_mm_mlp_adapter:
             for p in model.get_model().mm_projector.parameters():
+                p.requires_grad = False
+            for p in model.get_model().gcn_projector.parameters():
                 p.requires_grad = False
 
         if training_args.bits in [4, 8]:
@@ -1623,4 +1653,7 @@ def train(attn_implementation=None):
 
 
 if __name__ == "__main__":
+    import shutil
+    if os.path.exists('./playground/debug'):
+        shutil.rmtree('./playground/debug')
     train()

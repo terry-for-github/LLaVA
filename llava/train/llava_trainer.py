@@ -244,5 +244,17 @@ class LLaVATrainer(Trainer):
 
             if self.args.local_rank == 0 or self.args.local_rank == -1:
                 self.model.config.save_pretrained(output_dir)
-                torch.save(weight_to_save, os.path.join(output_dir, f'mm_projector.bin'))
-        super(LLaVATrainer, self)._save_checkpoint(model, trial)
+                torch.save(weight_to_save, os.path.join(output_dir, f'mm_projector.bin'))            
+            keys_to_match = ['gcn_projector']
+            weight_to_save = get_mm_adapter_state_maybe_zero_3(self.model.named_parameters(), keys_to_match)
+
+            if self.args.local_rank == 0 or self.args.local_rank == -1:
+                torch.save(weight_to_save, os.path.join(output_dir, f'gcn_projector.bin'))
+        else:
+            super(LLaVATrainer, self)._save_checkpoint(model, trial)
+
+    def _save(self, output_dir: Optional[str] = None, state_dict=None):
+        if getattr(self.args, 'tune_mm_mlp_adapter', False):
+            pass
+        else:
+            super(LLaVATrainer, self)._save(output_dir, state_dict)
