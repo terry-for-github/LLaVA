@@ -1,6 +1,12 @@
 {
     "exclude": [
         "**/__pycache__",
-        "playground"
-    ]
+        "playground",
+        "wandb",
+        "checkpoints",
+        "ckpts",
+        "logs",
+        ".git"
+    ],
+    "typeCheckingMode": "off"
 }

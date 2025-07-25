@@ -22,7 +22,7 @@ deepspeed \
     playground/image_caption/GBC-10M/train_1_clean_exist.json \
     playground/image_caption/MMInstruct/ANNO/MMInstruct-18K_exist.json \
     playground/image_caption/ShareGPT4V/ANNO/ShareGPT4V_102K_exist.json \
-    --vision_tower google/siglip-so400m-patch14-384/ \
+    --vision_tower google/siglip-so400m-patch14-384 \
     --mm_projector_type mlp2x_gelu \
     --tune_mm_mlp_adapter True \
     --mm_vision_select_layer -2 \
