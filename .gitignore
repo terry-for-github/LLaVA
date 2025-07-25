@@ -39,3 +39,4 @@ results/
 ckpts/
 .deepspeed_env
 naohai_*
+run.sh

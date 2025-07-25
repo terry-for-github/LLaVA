@@ -1,8 +1,10 @@
-from llava.train.train import train
 import os
+import sys
+import json
+import toml
 import builtins
-import transformers
-import deepspeed
+
+from llava.train.train import train
 
 
 def config_logger():
@@ -69,13 +71,60 @@ def set_builtin_print(is_local_main_process: bool):
     builtins.print = custom_print
 
 
+def parse_config_arg():
+    def get_config_file(args):
+        config_file = None
+        for idx, arg in enumerate(args):
+            if '--config' not in arg:
+                continue
+            if '--config=' in arg:
+                config_file = arg.split('=')[1]
+                args.pop(idx)
+            else:
+                config_file = args[idx + 1]
+                args.pop(idx)
+                args.pop(idx)
+            break
+        return config_file
+
+    def load_config(config_file):
+        if config_file.endswith(".json"):
+            with open(config_file, "r") as f:
+                return json.load(f)
+        elif config_file.endswith(".toml"):
+            return toml.load(config_file)
+        else:
+            raise ValueError("Unsupported config file format. Use JSON or TOML.")
+
+    def inject_config_to_args(config, args):
+        args_key = []
+        for arg in args:
+            if arg.startswith("--"):
+                arg_key = arg[2:] if '=' not in arg else arg.split('=')[0][2:]
+                args_key.append(arg_key)
+        for key, value in config.items():
+            if key in args_key:
+                continue
+            if isinstance(value, list):
+                args.append(f"--{key}")
+                for item in value:
+                    args.append(str(item))
+            else:
+                args.append(f"--{key}")
+                args.append(str(value))
+        return args
+
+    program = sys.argv[0]
+    args = sys.argv[1:]
+    config_file = get_config_file(args)
+    if config_file:
+        config = load_config(config_file)
+        args = inject_config_to_args(config, args)
+    sys.argv = [program] + args
+    print(sys.argv)
+
+
 if __name__ == '__main__':
-    from accelerate import PartialState
-    is_main_process = PartialState().is_main_process
-    is_local_main_process = PartialState().is_local_main_process
-
-    # set_builtin_print(is_local_main_process)
-
     config_logger()
-
+    parse_config_arg()
     train(attn_implementation="flash_attention_2")
