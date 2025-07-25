@@ -25,7 +25,6 @@ checkpoints
 ckpts*
 
 .ipynb_checkpoints
-*.ipynb
 
 # DevContainer
 !.devcontainer/*
@@ -40,3 +39,4 @@ results/
 ckpts/
 naohai_*
 .deepspeed_env
+run.sh

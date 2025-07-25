@@ -1,0 +1,39 @@
+# deepspeed
+deepspeed = "scripts/zero2.json"
+
+# model
+model_name_or_path = "lmsys/vicuna-7b-v1.5"
+vision_tower = "openai/clip-vit-large-patch14-336"
+pretrain_mm_mlp_adapter = "ckpts/llava-v1.5-7b-pretrain/mm_projector.bin"
+mm_projector_type = "mlp2x_gelu"
+mm_vision_select_layer = -2
+model_max_length = 2048
+
+# data process
+version = "v1"
+data_path = "playground/finetune/llava_v1_5_mix665k.json"
+image_folder = "playground/finetune"
+mm_use_im_start_end = false
+mm_use_im_patch_token = false
+image_aspect_ratio = "pad"
+group_by_modality_length = false
+lazy_preprocess = true
+
+# training
+bf16 = true
+tf32 = true
+num_train_epochs = 1
+per_device_train_batch_size = 4
+gradient_accumulation_steps = 2
+learning_rate = 2e-5
+weight_decay = 0.0
+warmup_ratio = 0.03
+lr_scheduler_type = "cosine"
+max_grad_norm = 0.5
+gradient_checkpointing = true
+dataloader_num_workers = 4
+
+# save and logging
+save_steps = 500
+save_total_limit = 1
+logging_steps = 1

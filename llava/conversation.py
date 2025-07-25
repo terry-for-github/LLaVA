@@ -1,6 +1,7 @@
 import dataclasses
 from enum import auto, Enum
-from typing import List, Tuple
+from typing import List, Tuple, Any
+from transformers import AutoTokenizer
 import base64
 from io import BytesIO
 from PIL import Image
@@ -10,9 +11,12 @@ class SeparatorStyle(Enum):
     """Different separator style."""
     SINGLE = auto()
     TWO = auto()
+    QWEN = auto()
     MPT = auto()
     PLAIN = auto()
     LLAMA_2 = auto()
+    LLAMA_3 = auto()
+    BAICHUAN = auto()
 
 
 @dataclasses.dataclass
@@ -27,9 +31,11 @@ class Conversation:
     sep2: str = None
     version: str = "Unknown"
 
+    tokenizer: Any = None
+    stop_token_ids: list[int] = None
     skip_next: bool = False
 
-    def get_prompt(self):
+    def get_prompt(self, tokenizer=None):
         messages = self.messages
         if len(messages) > 0 and type(messages[0][1]) is tuple:
             messages = self.messages.copy()
@@ -61,6 +67,64 @@ class Conversation:
                     ret += role + ": " + message + seps[i % 2]
                 else:
                     ret += role + ":"
+        elif self.sep_style == SeparatorStyle.QWEN:
+            ret = "" if self.system == "" else self.system + self.sep + "\n"
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, images, _ = message
+                        message = "<image>" * len(images) + message
+                    ret += role + "\n" + message + self.sep + "\n"
+                else:
+                    ret += role + "\n"
+            return ret
+        elif self.sep_style == SeparatorStyle.LLAMA_3:
+            if self.tokenizer is None:
+                if tokenizer is None:
+                    self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
+                self.tokenizer = tokenizer
+                # raise ValueError("Llama 3 tokenizer is not available. Make sure you have the necessary permissions.")
+            chat_template_messages = [{"role": "system", "content": self.system}]
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, images = message
+                        message = "<image>" * len(images) + message
+                    chat_template_messages.append({"role": role, "content": message})
+
+            # print(chat_template_messages)
+            return self.tokenizer.apply_chat_template(chat_template_messages, tokenize=False, add_generation_prompt=True)
+            # ret = "" if self.system == "" else self.system + self.sep + "\n"
+            # for role, message in messages:
+            #     if message:
+            #         if type(message) is tuple:
+            #             message, images = message
+            #             message = "<image>" * len(images) + message
+            #         ret += role + "\n" + message + self.sep + "\n"
+            #     else:
+            #         ret += role + "\n"
+            # return ret
+        elif self.sep_style == SeparatorStyle.QWEN:
+            ret = "" if self.system == "" else self.system + self.sep + "\n"
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, images, _ = message
+                        message = "<image>" * len(images) + message
+                    ret += role + "\n" + message + self.sep + "\n"
+                else:
+                    ret += role + "\n"
+            return ret
+        elif self.sep_style == SeparatorStyle.BAICHUAN:
+            seps = [self.sep, self.sep2]
+            ret = self.system + seps[0]
+            for i, (role, message) in enumerate(messages):
+                if message:
+                    if type(message) is tuple:
+                        message, _, _ = message
+                    ret += role + ' ' + message + seps[i % 2]
+                else:
+                    ret += role + ' '
         elif self.sep_style == SeparatorStyle.MPT:
             ret = self.system + self.sep
             for role, message in messages:
@@ -334,6 +398,40 @@ conv_llava_v1 = Conversation(
     sep2="</s>",
 )
 
+conv_llama_3 = Conversation(
+    system="You are a helpful language and vision assistant. " "You are able to understand the visual content that the user provides, " "and assist the user with a variety of tasks using natural language.",
+    roles=("user", "assistant"),
+    version="llama3",
+    messages=[],
+    offset=0,
+    sep="<|eot_id|>",
+    sep_style=SeparatorStyle.LLAMA_3,
+    tokenizer=AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct"),
+    stop_token_ids=[128009],
+)
+
+conv_llava_baichuan = Conversation(
+    system="A chat between a curious human and an artificial intelligence assistant. "
+           "The assistant gives helpful, detailed, and polite answers to the human's questions.",
+    roles=("<reserved_106>", "<reserved_107>"),
+    version="baichuan",
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.BAICHUAN,
+    sep=" ",
+    sep2="</s>",
+)
+
+conv_qwen = Conversation(
+    system="<|im_start|>system\nYou are a helpful assistant.",
+    roles=("<|im_start|>user", "<|im_start|>assistant"),
+    version="qwen",
+    messages=[],
+    offset=0,
+    sep_style=SeparatorStyle.QWEN,
+    sep="<|im_end|>",
+)
+
 conv_llava_v1_mmtag = Conversation(
     system="A chat between a curious user and an artificial intelligence assistant. "
            "The assistant is able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language."
@@ -369,6 +467,16 @@ Answer the questions.""",
     sep="<|im_end|>",
 )
 
+conv_qwen = Conversation(
+    system="<|im_start|>system\nYou are a helpful assistant.",
+    roles=("<|im_start|>user", "<|im_start|>assistant"),
+    version="qwen",
+    messages=[],
+    offset=0,
+    sep_style=SeparatorStyle.QWEN,
+    sep="<|im_end|>",
+)
+
 default_conversation = conv_vicuna_v1
 conv_templates = {
     "default": conv_vicuna_v0,
@@ -376,6 +484,7 @@ conv_templates = {
     "v1": conv_vicuna_v1,
     "vicuna_v1": conv_vicuna_v1,
     "llama_2": conv_llama_2,
+    "llama3": conv_llama_3,
     "mistral_instruct": conv_mistral_instruct,
     "chatml_direct": conv_chatml_direct,
     "mistral_direct": conv_chatml_direct,
@@ -389,6 +498,8 @@ conv_templates = {
     "llava_llama_2": conv_llava_llama_2,
 
     "mpt": conv_mpt,
+    "qwen": conv_qwen,
+    "baichuan": conv_llava_baichuan,
 }
 
 

@@ -1,55 +1,35 @@
-#    Copyright 2023 Haotian Liu
-#
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
-#
-#        http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
-
-
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 
-from transformers import AutoConfig, AutoModelForCausalLM, \
-                         LlamaConfig, LlamaModel, LlamaForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM
 
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.generation.utils import GenerateOutput
-from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 from ..llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
+from .baichuan import BaichuanConfig, BaichuanModel, BaichuanForCausalLM
 
 
-class LlavaConfig(LlamaConfig):
-    model_type = "llava_llama"
+class LlavaBaichuanConfig(BaichuanConfig):
+    model_type = "llava_baichuan"
 
 
-class LlavaLlamaModel(LlavaMetaModel, LlamaModel):
-    config_class = LlavaConfig
+class LlavaBaichuanModel(LlavaMetaModel, BaichuanModel):
+    config_class = LlavaBaichuanConfig
 
-    def __init__(self, config: LlamaConfig):
-        super(LlavaLlamaModel, self).__init__(config)
+    def __init__(self, config: BaichuanConfig):
+        super(LlavaBaichuanModel, self).__init__(config)
 
 
-class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
-    config_class = LlavaConfig
+class LlavaBaichuanForCausalLM(BaichuanForCausalLM, LlavaMetaForCausalLM):
+    config_class = LlavaBaichuanConfig
 
     def __init__(self, config):
-        super(LlamaForCausalLM, self).__init__(config)
-        self.model = LlavaLlamaModel(config)
-        self.pretraining_tp = config.pretraining_tp
-        self.vocab_size = config.vocab_size
+        super(BaichuanForCausalLM, self).__init__(config)
+        self.model = LlavaBaichuanModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.tokenizer = AutoTokenizer.from_pretrained('lmsys/vicuna-7b-v1.5')
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -70,7 +50,6 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         images: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[List[List[int]]] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[int] = None
     ) -> Union[Tuple, CausalLMOutputWithPast]:
 
         if inputs_embeds is None:
@@ -101,8 +80,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position
+            return_dict=return_dict
         )
 
     @torch.no_grad()
@@ -158,5 +136,5 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             inputs['image_sizes'] = image_sizes
         return inputs
 
-AutoConfig.register("llava_llama", LlavaConfig)
-AutoModelForCausalLM.register(LlavaConfig, LlavaLlamaForCausalLM)
+AutoConfig.register("llava_baichuan", LlavaBaichuanConfig)
+AutoModelForCausalLM.register(LlavaBaichuanConfig, LlavaBaichuanForCausalLM)

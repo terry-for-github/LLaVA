@@ -1,4 +1,4 @@
-#    Copyright 2023 Haotian Liu
+#    Copyright 2024 Hao Zhang
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -13,43 +13,47 @@
 #    limitations under the License.
 
 
-from typing import List, Optional, Tuple, Union
-
+from typing import List, Optional, Tuple, Union, Dict
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 
-from transformers import AutoConfig, AutoModelForCausalLM, \
-                         LlamaConfig, LlamaModel, LlamaForCausalLM
+import transformers
+from transformers import AutoConfig, AutoModelForCausalLM, LlamaConfig, LlamaModel, LlamaForCausalLM
 
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.generation.utils import GenerateOutput
-from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-from ..llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
+# from ...constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+from llava.model.llava_arch import LlavaMetaModel, LlavaMetaForCausalLM
+from transformers import Qwen2Config, Qwen2Model, Qwen2ForCausalLM
 
-
-class LlavaConfig(LlamaConfig):
-    model_type = "llava_llama"
-
-
-class LlavaLlamaModel(LlavaMetaModel, LlamaModel):
-    config_class = LlavaConfig
-
-    def __init__(self, config: LlamaConfig):
-        super(LlavaLlamaModel, self).__init__(config)
+# from .qwen.modeling_qwen import QWenLMHeadModel, QWenModel
+# from .qwen.configuration_qwen import QWenConfig
 
 
-class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
-    config_class = LlavaConfig
+class LlavaQwenConfig(Qwen2Config):
+    model_type = "llava_qwen"
+
+
+class LlavaQwenModel(LlavaMetaModel, Qwen2Model):
+    config_class = LlavaQwenConfig
+
+    def __init__(self, config: Qwen2Config):
+        super(LlavaQwenModel, self).__init__(config)
+
+
+class LlavaQwenForCausalLM(Qwen2ForCausalLM, LlavaMetaForCausalLM):
+    config_class = LlavaQwenConfig
 
     def __init__(self, config):
-        super(LlamaForCausalLM, self).__init__(config)
-        self.model = LlavaLlamaModel(config)
-        self.pretraining_tp = config.pretraining_tp
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # super(Qwen2ForCausalLM, self).__init__(config)
+        Qwen2ForCausalLM.__init__(self, config)
+        config.model_type = "llava_qwen"
+        config.rope_scaling = None
 
-        self.tokenizer = AutoTokenizer.from_pretrained('lmsys/vicuna-7b-v1.5')
+        self.model = LlavaQwenModel(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -70,27 +74,14 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         images: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[List[List[int]]] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[int] = None
+        cache_position=None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
 
         if inputs_embeds is None:
-            (
-                input_ids,
-                position_ids,
-                attention_mask,
-                past_key_values,
-                inputs_embeds,
-                labels
-            ) = self.prepare_inputs_labels_for_multimodal(
-                input_ids,
-                position_ids,
-                attention_mask,
-                past_key_values,
-                labels,
-                images,
-                image_sizes
-            )
+            (input_ids, position_ids, attention_mask, past_key_values, inputs_embeds, labels) = \
+                self.prepare_inputs_labels_for_multimodal(input_ids, position_ids, attention_mask, past_key_values, labels, images, image_sizes)
 
+        
         return super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -102,7 +93,6 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position
         )
 
     @torch.no_grad()
@@ -119,44 +109,22 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             raise NotImplementedError("`inputs_embeds` is not supported")
 
         if images is not None:
-            (
-                inputs,
-                position_ids,
-                attention_mask,
-                _,
-                inputs_embeds,
-                _
-            ) = self.prepare_inputs_labels_for_multimodal(
-                inputs,
-                position_ids,
-                attention_mask,
-                None,
-                None,
-                images,
-                image_sizes=image_sizes
-            )
+            (inputs, position_ids, attention_mask, _, inputs_embeds, _) = self.prepare_inputs_labels_for_multimodal(inputs, position_ids, attention_mask, None, None, images, image_sizes=image_sizes)
         else:
             inputs_embeds = self.get_model().embed_tokens(inputs)
 
-        return super().generate(
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            **kwargs
-        )
+        return super().generate(position_ids=position_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs)
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None,
-                                      inputs_embeds=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         images = kwargs.pop("images", None)
         image_sizes = kwargs.pop("image_sizes", None)
-        inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, **kwargs
-        )
+        inputs = super().prepare_inputs_for_generation(input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, **kwargs)
         if images is not None:
-            inputs['images'] = images
+            inputs["images"] = images
         if image_sizes is not None:
-            inputs['image_sizes'] = image_sizes
+            inputs["image_sizes"] = image_sizes
         return inputs
 
-AutoConfig.register("llava_llama", LlavaConfig)
-AutoModelForCausalLM.register(LlavaConfig, LlavaLlamaForCausalLM)
+
+AutoConfig.register("llava_qwen", LlavaQwenConfig)
+AutoModelForCausalLM.register(LlavaQwenConfig, LlavaQwenForCausalLM)

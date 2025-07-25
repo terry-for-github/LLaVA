@@ -93,6 +93,14 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                 tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=True)
                 cfg_pretrained = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
                 model = LlavaMptForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, config=cfg_pretrained, **kwargs)
+            elif 'baichuan' in model_name.lower() or 'naohai' in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True,)
+                model = LlavaBaichuanForCausalLM.from_pretrained(
+                    model_path,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
+                    **kwargs
+                )
             else:
                 tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
                 cfg_pretrained = AutoConfig.from_pretrained(model_path)
@@ -110,6 +118,21 @@ def load_pretrained_model(model_path, model_base, model_name, load_8bit=False, l
                 model = LlavaMistralForCausalLM.from_pretrained(
                     model_path,
                     low_cpu_mem_usage=True,
+                    **kwargs
+                )
+            elif 'qwen' in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_path)
+                model = LlavaQwenForCausalLM.from_pretrained(
+                    model_path,
+                    low_cpu_mem_usage=True,
+                    **kwargs
+                )
+            elif 'baichuan' in model_name.lower() or 'naohai' in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True,)
+                model = LlavaBaichuanForCausalLM.from_pretrained(
+                    model_path,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
                     **kwargs
                 )
             else:
